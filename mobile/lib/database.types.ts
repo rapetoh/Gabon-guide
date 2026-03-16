@@ -42,7 +42,9 @@ export interface Database {
           phone: string | null
           whatsapp: string | null
           hours: PlaceHours | null
+          hours_verified_at: string | null
           is_active: boolean
+          is_deleted: boolean
           created_at: string
           updated_at: string
         }
@@ -55,6 +57,8 @@ export interface Database {
           place_id: string
           storage_path: string
           is_primary: boolean
+          is_deleted: boolean
+          position: number
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['photos']['Row'], 'id' | 'created_at'>

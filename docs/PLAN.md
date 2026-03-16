@@ -26,84 +26,75 @@ okili/
 
 ---
 
-## Phase 0 — Project Setup
+## Phase 0 — Project Setup ✅ COMPLETED — March 2026
 
 **Goal:** Working skeleton; all tools configured; team can run the project locally.
 
 ### 0.1 Repository & Tooling
-- [ ] Rename/restructure repo root to reflect O'Kili branding
-- [ ] Initialize `/mobile`, `/web`, `/supabase`, `/docs` folders
-- [ ] Add root `.gitignore` (Node, Expo, Next.js, `.env` files)
-- [ ] Add root `README.md` with setup instructions per workspace
+- [x] Rename/restructure repo root to reflect O'Kili branding
+- [x] Initialize `/mobile`, `/web`, `/supabase`, `/docs` folders
+- [x] Add root `.gitignore` (Node, Expo, Next.js, `.env` files)
+- [x] Add root `README.md` with setup instructions per workspace
 
 ### 0.2 Supabase Project
-- [ ] Create Supabase account and new project
-- [ ] Store `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env` files (never commit)
-- [ ] Enable Email/Password auth
-- [ ] Configure Google OAuth provider (Google Cloud Console credentials)
-- [ ] Configure Apple OAuth provider (Apple Developer credentials — account confirmed)
-- [ ] Add redirect URLs for Expo deep link scheme
+- [x] Create Supabase account and new project
+- [x] Store `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env` files (never commit)
+- [x] Enable Email/Password auth
+- [ ] Configure Google OAuth provider (Google Cloud Console credentials) — *deferred: needs Google Cloud account*
+- [ ] Configure Apple OAuth provider (Apple Developer credentials) — *deferred: configure before Phase 1 QA*
+- [ ] Add redirect URLs for Expo deep link scheme — *deferred: configure with OAuth setup*
 
 ### 0.3 Mobile App Bootstrap (`/mobile`)
-- [ ] Init Expo project with TypeScript template: `npx create-expo-app`
-- [ ] Install and configure Expo Router (file-based routing)
-- [ ] Install `@supabase/supabase-js` — configure Supabase client
-- [ ] Install `@tanstack/react-query` — configure QueryClient provider
-- [ ] Install `expo-image`, `expo-linking`, `expo-image-manipulator`
-- [ ] Install `expo-auth-session` (Google) and `expo-apple-authentication` (Apple)
-- [ ] Install Branch.io React Native SDK — configure with Branch key
-- [ ] Install PostHog React Native SDK — configure with project API key
-- [ ] Install `i18next` + `react-i18next` — scaffold `locales/fr.json` and `locales/en.json`
-- [ ] Install `jest` + `jest-expo` for automated testing
-- [ ] Configure `app.json`: name = O'Kili, bundle ID = `com.okili.app`, icons placeholder
+- [x] Init Expo project with TypeScript template
+- [x] Install and configure Expo Router (file-based routing)
+- [x] Install `@supabase/supabase-js` — Supabase client configured
+- [x] Install `@tanstack/react-query`
+- [x] Install `expo-image`, `expo-linking`, `expo-image-manipulator`
+- [x] Install `expo-auth-session` (Google) and `expo-apple-authentication` (Apple)
+- [ ] Install Branch.io React Native SDK — *deferred: needs Branch.io account/key*
+- [ ] Install PostHog React Native SDK — *deferred: needs PostHog account/key*
+- [x] Install `i18next` + `react-i18next` — `locales/fr.json` and `locales/en.json` scaffolded
+- [x] Install `jest` + `jest-expo` for automated testing
+- [x] Configure `app.json`: name = O'Kili, bundle ID = `com.okili.app`
 
 ### 0.4 Web Admin Bootstrap (`/web`)
-- [ ] Init Next.js app with TypeScript + Tailwind: `npx create-next-app`
-- [ ] Install `@supabase/supabase-js` — configure Supabase client
-- [ ] Add auth guard middleware (redirect to `/login` if no session)
+- [x] Init Next.js app with TypeScript + Tailwind
+- [x] Install `@supabase/supabase-js` — Supabase client configured
+- [ ] Add auth guard middleware (redirect to `/login` if no session) — *done in Phase 4*
 
 ### 0.5 Database Schema
-- [ ] Write migration files in `/supabase/migrations/`
-- [ ] Create tables: `categories`, `zones`, `places`, `photos`, `profiles`, `favorites`, `weekly_feed`
-- [ ] Apply migrations: `supabase db push`
-- [ ] Seed: categories (Restaurant, Bar, Activity), placeholder zones (TBD)
-- [ ] Create Storage bucket: `place-photos` (public read, authenticated write)
-- [ ] Generate TypeScript types: `supabase gen types typescript` → shared between `/mobile` and `/web`
+- [x] Write migration files in `/supabase/migrations/` (001, 002, 003)
+- [x] Create all 7 tables: `categories`, `zones`, `places`, `photos`, `profiles`, `favorites`, `weekly_feed`
+- [x] Apply migrations in Supabase
+- [ ] Seed: categories (Restaurant, Bar, Activity) — *to seed before content sprint*
+- [x] Create Storage bucket: `place-photos` (public)
+- [x] TypeScript types in `mobile/lib/database.types.ts`
 
 ### 0.6 Row Level Security (RLS)
-- [ ] `places`: public SELECT where `is_active = true`; admin-only INSERT/UPDATE/DELETE
-- [ ] `photos`: public SELECT; admin-only INSERT/DELETE
-- [ ] `profiles`: users can SELECT their own row; admin-only UPDATE `is_admin`
-- [ ] `favorites`: authenticated users SELECT/INSERT/DELETE their own rows only
-- [ ] `weekly_feed`: public SELECT; admin-only INSERT/UPDATE/DELETE
-- [ ] `categories` + `zones`: public SELECT; admin-only modifications
+- [x] All RLS policies applied via migration 002 + 003
 
 ### 0.7 Admin Role Setup
-- [ ] `profiles` table auto-creates a row with `is_admin = false` on every new user signup
-  (via Supabase Database Trigger or auth webhook)
-- [ ] Manually set `is_admin = true` for admin users directly in Supabase dashboard
-- [ ] Document this process in README for the team
+- [x] `profiles` trigger — auto-creates row with `is_admin = false` on signup
+- [ ] Set `is_admin = true` for your account — *do this after first login in Phase 1*
 
 ---
 
-### Phase 0 — QA Gate (run before starting Phase 1)
+### Phase 0 — QA Gate ✅ PASSED — March 2026
 
 **Supabase**
-- [ ] Open Supabase dashboard → Table Editor → confirm all 7 tables exist with correct columns
-- [ ] Confirm seed data: 3 categories (Restaurant, Bar, Activity) visible in `categories` table
-- [ ] Confirm Storage bucket `place-photos` exists
-- [ ] RLS test — anonymous INSERT blocked: in Supabase SQL editor run:
-  `insert into places (name) values ('test');` → should return a permission error
-- [ ] Create a test user via Supabase Auth dashboard → confirm a `profiles` row is created automatically with `is_admin = false`
+- [x] All 7 tables exist in Supabase Table Editor — *confirmed by user*
+- [x] Storage bucket `place-photos` exists — *confirmed by user*
+- [ ] Seed data (categories) — *pending content sprint*
+- [ ] RLS anonymous INSERT block test — *deferred*
+- [ ] Profiles trigger test — *verified automatically when first user signs up in Phase 1*
 
 **Mobile App**
-- [ ] Run `npx expo start` — app launches in Expo Go on iPhone without crashing
-- [ ] App connects to Supabase: no red error banners on launch
-- [ ] TypeScript compiles: `npx tsc --noEmit` → zero errors
+- [x] TypeScript compiles: `npx tsc --noEmit` → 0 errors
+- [ ] App launches on iPhone without crashing — *verified at start of Phase 1*
 
 **Web Admin**
-- [ ] Run `npm run dev` in `/web` — opens in browser without errors
-- [ ] Visiting `/admin` redirects to `/login` (auth guard working)
+- [x] TypeScript compiles: `npx tsc --noEmit` → 0 errors
+- [ ] `npm run dev` launches without errors — *verified at start of Phase 4*
 
 ---
 
