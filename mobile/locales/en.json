@@ -1,0 +1,93 @@
+{
+  "tabs": {
+    "home": "Home",
+    "explore": "Explore",
+    "favorites": "Favorites"
+  },
+  "home": {
+    "weekendTitle": "Weekend in Libreville",
+    "seeAll": "See all"
+  },
+  "explore": {
+    "searchPlaceholder": "Search a place...",
+    "filters": {
+      "all": "All",
+      "openNow": "Open now",
+      "category": "Category",
+      "zone": "Area",
+      "price": "Budget"
+    },
+    "noResults": "No places found",
+    "noResultsHint": "Try adjusting your filters"
+  },
+  "place": {
+    "open": "Open",
+    "closed": "Closed",
+    "openUntil": "Open until {{time}}",
+    "closedUntil": "Opens at {{time}}",
+    "hours": "Hours",
+    "address": "Address",
+    "price": {
+      "1": "Budget",
+      "2": "Mid-range",
+      "3": "Upscale"
+    },
+    "actions": {
+      "whatsapp": "WhatsApp",
+      "call": "Call",
+      "save": "Save",
+      "saved": "Saved",
+      "share": "Share"
+    },
+    "days": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    },
+    "closedDay": "Closed"
+  },
+  "categories": {
+    "restaurant": "Restaurant",
+    "bar": "Bar",
+    "activity": "Activity"
+  },
+  "favorites": {
+    "title": "My favorites",
+    "empty": "No favorites yet",
+    "emptyHint": "Save places to find them here",
+    "loginRequired": "Log in to see your favorites"
+  },
+  "auth": {
+    "login": "Log in",
+    "register": "Create account",
+    "continueWithGoogle": "Continue with Google",
+    "continueWithApple": "Continue with Apple",
+    "or": "or",
+    "email": "Email address",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "alreadyAccount": "Already have an account?",
+    "logout": "Log out",
+    "loginToSave": "Log in to save this place"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "offline": "No internet connection",
+    "offlineHint": "Check your connection and try again"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "french": "Français",
+    "english": "English",
+    "about": "About O'Kili"
+  },
+  "quality": {
+    "promise": "Every place on O'Kili is hand-picked and confirmed by our team."
+  }
+}

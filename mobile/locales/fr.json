@@ -1,0 +1,93 @@
+{
+  "tabs": {
+    "home": "Accueil",
+    "explore": "Explorer",
+    "favorites": "Favoris"
+  },
+  "home": {
+    "weekendTitle": "Week-end à Libreville",
+    "seeAll": "Voir tout"
+  },
+  "explore": {
+    "searchPlaceholder": "Rechercher un lieu...",
+    "filters": {
+      "all": "Tous",
+      "openNow": "Ouvert maintenant",
+      "category": "Catégorie",
+      "zone": "Quartier",
+      "price": "Budget"
+    },
+    "noResults": "Aucun lieu trouvé",
+    "noResultsHint": "Essayez de modifier vos filtres"
+  },
+  "place": {
+    "open": "Ouvert",
+    "closed": "Fermé",
+    "openUntil": "Ouvert jusqu'à {{time}}",
+    "closedUntil": "Ouvre à {{time}}",
+    "hours": "Horaires",
+    "address": "Adresse",
+    "price": {
+      "1": "Économique",
+      "2": "Intermédiaire",
+      "3": "Haut de gamme"
+    },
+    "actions": {
+      "whatsapp": "WhatsApp",
+      "call": "Appeler",
+      "save": "Enregistrer",
+      "saved": "Enregistré",
+      "share": "Partager"
+    },
+    "days": {
+      "mon": "Lundi",
+      "tue": "Mardi",
+      "wed": "Mercredi",
+      "thu": "Jeudi",
+      "fri": "Vendredi",
+      "sat": "Samedi",
+      "sun": "Dimanche"
+    },
+    "closedDay": "Fermé"
+  },
+  "categories": {
+    "restaurant": "Restaurant",
+    "bar": "Bar",
+    "activity": "Activité"
+  },
+  "favorites": {
+    "title": "Mes favoris",
+    "empty": "Aucun favori pour l'instant",
+    "emptyHint": "Enregistrez des lieux pour les retrouver ici",
+    "loginRequired": "Connectez-vous pour voir vos favoris"
+  },
+  "auth": {
+    "login": "Se connecter",
+    "register": "Créer un compte",
+    "continueWithGoogle": "Continuer avec Google",
+    "continueWithApple": "Continuer avec Apple",
+    "or": "ou",
+    "email": "Adresse email",
+    "password": "Mot de passe",
+    "forgotPassword": "Mot de passe oublié ?",
+    "noAccount": "Pas encore de compte ?",
+    "alreadyAccount": "Déjà un compte ?",
+    "logout": "Se déconnecter",
+    "loginToSave": "Connectez-vous pour enregistrer ce lieu"
+  },
+  "errors": {
+    "generic": "Une erreur est survenue. Veuillez réessayer.",
+    "offline": "Pas de connexion internet",
+    "offlineHint": "Vérifiez votre connexion et réessayez"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue",
+    "french": "Français",
+    "english": "English",
+    "about": "À propos d'O'Kili"
+  },
+  "quality": {
+    "promise": "Tous les lieux sur O'Kili sont sélectionnés et confirmés par notre équipe."
+  }
+}

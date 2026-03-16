@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "O'Kili",
+    "slug": "okili",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.okili.app",
+      "usesAppleSignIn": true
+    },
+    "android": {
+      "package": "com.okili.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication"
+    ],
+    "scheme": "okili",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

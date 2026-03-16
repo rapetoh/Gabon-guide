@@ -1,0 +1,59 @@
+{
+  "name": "mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test": "jest --watchAll=false",
+    "test:watch": "jest --watchAll"
+  },
+  "jest": {
+    "projects": [
+      {
+        "displayName": "utils",
+        "testEnvironment": "node",
+        "testMatch": ["<rootDir>/__tests__/isOpenNow.test.ts", "<rootDir>/__tests__/formatWhatsApp.test.ts"],
+        "transform": {
+          "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "strict": false } }]
+        }
+      },
+      {
+        "displayName": "app",
+        "preset": "jest-expo",
+        "testMatch": ["<rootDir>/__tests__/**/*.test.tsx"],
+        "transformIgnorePatterns": [
+          "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|react-navigation|@react-navigation/.*)"
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.1",
+    "@tanstack/react-query": "^5.90.21",
+    "expo": "~55.0.6",
+    "expo-apple-authentication": "^55.0.8",
+    "expo-auth-session": "^55.0.8",
+    "expo-image": "^55.0.6",
+    "expo-image-manipulator": "^55.0.10",
+    "expo-linking": "^55.0.7",
+    "expo-router": "^55.0.5",
+    "expo-status-bar": "~55.0.4",
+    "expo-web-browser": "^55.0.9",
+    "i18next": "^25.8.18",
+    "react": "19.2.0",
+    "react-i18next": "^16.5.8",
+    "react-native": "0.83.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/react": "~19.2.2",
+    "jest": "^30.3.0",
+    "jest-expo": "^55.0.9",
+    "ts-jest": "^29.4.6",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
