@@ -40,9 +40,9 @@ okili/
 - [x] Create Supabase account and new project
 - [x] Store `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env` files (never commit)
 - [x] Enable Email/Password auth
-- [ ] Configure Google OAuth provider (Google Cloud Console credentials) — *deferred: needs Google Cloud account*
-- [ ] Configure Apple OAuth provider (Apple Developer credentials) — *deferred: configure before Phase 1 QA*
-- [ ] Add redirect URLs for Expo deep link scheme — *deferred: configure with OAuth setup*
+- [x] Configure Google OAuth provider — Google Cloud Console credentials configured; `okili://` redirect registered
+- [x] Configure Apple OAuth provider — Supabase Apple provider enabled; Client ID = `com.okili.app`
+- [x] Add redirect URLs for Expo deep link scheme — `okili://` added to Supabase redirect URLs
 
 ### 0.3 Mobile App Bootstrap (`/mobile`)
 - [x] Init Expo project with TypeScript template
@@ -66,7 +66,9 @@ okili/
 - [x] Write migration files in `/supabase/migrations/` (001, 002, 003)
 - [x] Create all 7 tables: `categories`, `zones`, `places`, `photos`, `profiles`, `favorites`, `weekly_feed`
 - [x] Apply migrations in Supabase
-- [ ] Seed: categories (Restaurant, Bar, Activity) — *to seed before content sprint*
+- [x] Migration 004: `latitude`, `longitude`, `website`, `subcategory_id` on `places` + new `subcategories` + `reviews` tables
+- [x] Apply migration 004 in Supabase — *confirmed applied by user*
+- [x] Seed: categories (Restaurant, Bar, Nightlife, Cafés, Activities) + zones (Centre-ville, Akanda, Owendo, Libreville Nord, Libreville Sud) — *seeded March 2026*
 - [x] Create Storage bucket: `place-photos` (public)
 - [x] TypeScript types in `mobile/lib/database.types.ts`
 
@@ -75,7 +77,7 @@ okili/
 
 ### 0.7 Admin Role Setup
 - [x] `profiles` trigger — auto-creates row with `is_admin = false` on signup
-- [ ] Set `is_admin = true` for your account — *do this after first login in Phase 1*
+- [x] Set `is_admin = true` for your account — *done March 2026*
 
 ---
 
@@ -84,13 +86,13 @@ okili/
 **Supabase**
 - [x] All 7 tables exist in Supabase Table Editor — *confirmed by user*
 - [x] Storage bucket `place-photos` exists — *confirmed by user*
-- [ ] Seed data (categories) — *pending content sprint*
+- [x] Seed data (categories + zones) — *seeded March 2026*
 - [ ] RLS anonymous INSERT block test — *deferred*
-- [ ] Profiles trigger test — *verified automatically when first user signs up in Phase 1*
+- [x] Profiles trigger test — *verified: trigger fires correctly on signup*
 
 **Mobile App**
 - [x] TypeScript compiles: `npx tsc --noEmit` → 0 errors
-- [ ] App launches on iPhone without crashing — *verified at start of Phase 1*
+- [x] App launches on iPhone without crashing — *confirmed March 2026*
 
 **Web Admin**
 - [x] TypeScript compiles: `npx tsc --noEmit` → 0 errors
@@ -98,18 +100,19 @@ okili/
 
 ---
 
-## Phase 1 — Mobile App Foundation
+## Phase 1 — Mobile App Foundation ✅ COMPLETED — March 2026
 
 **Goal:** Navigation in place; real Supabase data flowing; auth fully working.
 
-### 1.1 Navigation Structure (Expo Router)
+### 1.1 Navigation Structure (Expo Router) ✅
 
 ```
 mobile/app/
 ├── (tabs)/
 │   ├── index.tsx           # Home — weekly feed
 │   ├── explore.tsx         # Browse/search/filter
-│   └── favorites.tsx       # Saved places (login required)
+│   ├── favorites.tsx       # Saved places (login required)
+│   └── profile.tsx         # Profile — account, language, logout
 ├── place/[id].tsx          # Place detail page
 ├── auth/
 │   ├── _layout.tsx
@@ -121,30 +124,37 @@ mobile/app/
     └── place/[id]/edit.tsx # Edit listing
 ```
 
-- [ ] Build bottom tab navigator (Home / Explore / Favorites)
-- [ ] Add place detail dynamic route
-- [ ] Add auth screens
-- [ ] Add admin section with layout-level auth guard (admin role check)
+- [x] Build bottom tab navigator (Home / Explore / Favorites / Profile)
+- [x] Add place detail dynamic route
+- [x] Add auth screens
+- [x] Add admin section with layout-level auth guard (admin role check)
 
-### 1.2 Data Layer (TanStack Query + Supabase)
-- [ ] `usePlaces(filters)` — paginated active places with filter support
-- [ ] `usePlace(id)` — single place with photos
-- [ ] `useCategories()` — all categories
-- [ ] `useZones()` — all zones
-- [ ] `useSession()` — current auth session
-- [ ] `useIsAdmin()` — query `profiles` table for `is_admin`
-- [ ] `useFavorites()` — user's saved places (add / remove / check)
-- [ ] `useWeeklyFeed()` — current week's feed; fallback to recent listings if empty
+### 1.2 Data Layer (TanStack Query + Supabase) ✅
+- [x] `usePlaces(filters)` — paginated active places with filter support
+- [x] `usePlace(id)` — single place with photos + reviews
+- [x] `useCategories()` — all categories
+- [x] `useSubcategories(categoryId)` — subcategories for a given category
+- [x] `useZones()` — all zones
+- [x] `useSession()` — current auth session
+- [x] `useIsAdmin()` — query `profiles` table for `is_admin`
+- [x] `useFavorites()` — user's saved places (add / remove / check)
+- [x] `useWeeklyFeed()` — current week's feed; fallback to recent listings if empty
+- [x] `useReviews(placeId)` — reviews for a place with average rating
+- [x] `useUserReview(placeId)` — current user's review for a place (for edit/delete)
 
-### 1.3 Auth Flow
-- [ ] Login/Register screen: three clear options — Email+Password | Google | Apple
-- [ ] Email + password: register form + login form
-- [ ] Google Sign-In: `expo-auth-session` + Supabase `signInWithOAuth`
-- [ ] Apple Sign-In: `expo-apple-authentication` + Supabase `signInWithIdToken`
-- [ ] Persistent session (AsyncStorage — Supabase client handles automatically)
-- [ ] Logout
-- [ ] Admin detection: query `profiles` table → `is_admin = true`
-- [ ] Non-blocking auth: unauthenticated user taps Save → login bottom sheet, not redirect
+**Note:** `database.types.ts` hand-written types required `Relationships: []` on every table and `Views`/`Functions` keys on the schema to satisfy `@supabase/supabase-js` v2.99 `GenericSchema` constraint. Nested join type inference disabled — explicit `ReviewWithProfile` interface used in `useReviews` instead.
+
+### 1.3 Auth Flow ✅
+- [x] Login/Register screen: three clear options — Email+Password | Google | Apple
+- [x] Email + password: register form + login form
+- [x] Google Sign-In: `expo-auth-session` + Supabase `signInWithOAuth` + PKCE — *fix: hardcode `okili://` redirect + extract clean code from `%23`-suffixed callback URL*
+- [x] Apple Sign-In: `expo-apple-authentication` + Supabase `signInWithIdToken` — *Client ID = `com.okili.app` (bundle ID, not Team ID)*
+- [x] Persistent session (AsyncStorage — Supabase client handles automatically)
+- [x] Logout (implemented in Profile tab)
+- [x] Admin detection: query `profiles` table → `is_admin = true`
+- [ ] Non-blocking auth: unauthenticated user taps Save → login bottom sheet, not redirect — *Phase 2, when Save CTA is built*
+
+**TypeScript check:** `npx tsc --noEmit` → 0 errors ✅
 
 ### 1.4 Analytics Setup
 - [ ] Initialize PostHog in app root
@@ -153,43 +163,43 @@ mobile/app/
 
 ---
 
-### Phase 1 — QA Gate (run before starting Phase 2)
+### Phase 1 — QA Gate ✅ PASSED — March 2026
 
 **Navigation**
-- [ ] Tap all 3 tabs (Home / Explore / Favorites) — each loads without crashing
-- [ ] Navigate to a place detail page — loads correctly
-- [ ] Navigate to auth screen — loads correctly
-- [ ] Back navigation works on all screens
+- [x] Tap all 4 tabs (Home / Explore / Favorites / Profile) — each loads without crashing
+- [x] Navigate to a place detail page — loads correctly
+- [x] Navigate to auth screen — loads correctly
+- [x] Back navigation works on all screens
 
 **Auth — Email/Password**
-- [ ] Register a new account with email + password → success
-- [ ] Log out → session cleared
-- [ ] Log back in with same credentials → success
-- [ ] Wrong password → shows error message (does not crash)
+- [x] Register a new account with email + password → success
+- [x] Log out → session cleared
+- [x] Log back in with same credentials → success
+- [x] Wrong password → shows error message (does not crash)
 
 **Auth — Apple Sign-In**
-- [ ] Tap "Continue with Apple" → Apple auth sheet appears
-- [ ] Complete Apple login → user is logged in
-- [ ] Check Supabase dashboard → user appears in Auth → Users
+- [x] Tap "Continue with Apple" → Apple auth sheet appears
+- [x] Complete Apple login → user is logged in
+- [x] Check Supabase dashboard → user appears in Auth → Users
 
 **Auth — Google Sign-In**
-- [ ] Tap "Continue with Google" → Google OAuth flow opens
-- [ ] Complete Google login → user is logged in
+- [x] Tap "Continue with Google" → Google OAuth flow opens
+- [x] Complete Google login → user is logged in
 
 **Session persistence**
-- [ ] Log in → close the app completely → reopen → still logged in (not sent back to login)
+- [x] Log in → close the app completely → reopen → still logged in
 
 **Admin access**
-- [ ] Log in with admin account → admin tab/section is visible
+- [ ] Log in with admin account → admin tab/section is visible — *pending: requires is_admin=true + admin UI*
 - [ ] Log in with regular account → admin section is completely invisible
 - [ ] Try to navigate to `/admin` route manually with regular account → redirected to home
 
 **Favorites tab (logged out)**
-- [ ] Open Favorites tab while not logged in → login prompt appears (not blank screen)
+- [x] Open Favorites tab while not logged in → login prompt appears (not blank screen)
 
 ---
 
-## Phase 2 — Core User Features
+## Phase 2 — Core User Features 🔄 IN PROGRESS — March 2026
 
 **Goal:** Full discovery flow — browse, filter, view detail, take action.
 
@@ -201,24 +211,50 @@ mobile/app/
 
 ### 2.2 Explore / Search Screen
 - [ ] Paginated list of active places (load-more, 20 per page)
-- [ ] Filter bar: Category | Price range | Zone | Open now
+- [ ] Filter bar: Category | Subcategory | Price range | Zone | Open now | Near me
+- [ ] "Near me" filter: request location permission → sort by distance from user
 - [ ] Open/Closed logic:
   - Always computed in **Libreville timezone (UTC+1 / WAT)**
   - Handle overnight hours (e.g., bar open 21:00 → closes 02:00 next day)
   - `overnight: true` flag in hours JSON triggers next-day close logic
 - [ ] Listing card: primary photo, name, category, zone, price range, open/closed status
+- [ ] Neighborhoods section: zone cards with place count + photo
+- [ ] "Curated for you" section: admin-curated thematic collections
 
 ### 2.3 Place Detail Page
 - [ ] Hero photo + swipeable gallery
-- [ ] Name, category, zone
+- [ ] Name, category, subcategory, zone
 - [ ] Price range (Économique / Intermédiaire / Haut de gamme)
+- [ ] Average rating + review count (e.g., ⭐ 4.8 · 124 reviews)
 - [ ] Open/Closed status (Libreville time) + today's hours
 - [ ] Full hours accordion (all days, overnight handled)
 - [ ] Description in current app language (FR or EN)
 - [ ] Address (if available)
+- [ ] Website link (if available)
 - [ ] Sticky CTA bar at bottom: WhatsApp | Call | Save | Share
+- [ ] Reviews section: list of user reviews + "Leave a review" button (login required)
+- [ ] Leave/edit review: rating (1–5 stars) + optional comment
 
-### 2.4 CTA Actions
+### 2.4 Map Screen
+- [ ] Google Maps view with pins for all active places
+- [ ] Filter chips at top: All Places | Restaurants | Bars | Activities...
+- [ ] Tap a pin → bottom sheet preview card (name, category, zone, rating)
+- [ ] Tap preview card → navigate to place detail page
+- [ ] "Near me" → center map on user's location (request permission)
+- [ ] Install: `react-native-maps` + Google Maps API keys in `app.json`
+
+**Google Maps API keys (2 keys — one per platform):**
+- `okili-maps-ios`: restricted to iOS apps, bundle ID `com.okili.app`, Maps SDK for iOS only ← do in Phase 0
+- `okili-maps-android`: API-restricted to Maps SDK for Android only (no app restriction yet — SHA-1 fingerprint needed, add in Phase 6 when Android build is set up)
+- Keys stored in `.env` — never committed to git
+
+### 2.5 Profile Tab
+- [ ] Show user info when logged in (avatar, email/name)
+- [ ] Language toggle (FR / EN)
+- [ ] Logout button
+- [ ] Login prompt when not logged in
+
+### 2.6 CTA Actions
 - [ ] **WhatsApp:** auto-format number to `+241XXXXXXXX` → open `https://wa.me/241XXXXXXXX`
 - [ ] **Call:** `expo-linking` → `tel:+241XXXXXXXX`
 - [ ] **Save:** toggle favorite; if logged out → login bottom sheet
@@ -226,7 +262,7 @@ mobile/app/
   - If recipient has O'Kili: opens place detail directly
   - If recipient doesn't have O'Kili: opens a basic web page with place info + download prompt
 
-### 2.5 Analytics Events (PostHog)
+### 2.7 Analytics Events (PostHog)
 - [ ] `place_viewed` — on detail page open
 - [ ] `cta_whatsapp_tapped` — on WhatsApp button tap
 - [ ] `cta_call_tapped` — on Call button tap
@@ -235,13 +271,13 @@ mobile/app/
 - [ ] `weekly_feed_opened` — on weekly feed card tap
 - [ ] `filter_used` — on any filter change (log which filters)
 
-### 2.6 Favorites Screen
+### 2.8 Favorites Screen
 - [ ] List of saved places (requires login)
 - [ ] If not logged in: show login prompt (not a blank/broken screen)
 - [ ] Tap to open place detail
 - [ ] Remove from favorites
 
-### 2.7 Automated Unit Tests
+### 2.9 Automated Unit Tests
 
 These two functions are pure logic — no UI, no network. They must be unit tested because
 failures are invisible to the user (the button still taps, but the wrong thing happens).
@@ -593,7 +629,7 @@ hours per day (with overnight toggle), description FR/EN, address, `is_active`.
 | Backend | Supabase | Auth + DB + Storage + RLS in one service |
 | Admin UI | Next.js + Tailwind | Fast to build; Vercel free tier; same Supabase project |
 | Repo | Monorepo | Shared Supabase types; easier to keep in sync |
-| GPS / Maps | None (MVP) | Zone filter sufficient; no Google Maps cost |
+| GPS / Maps | Google Maps via react-native-maps | Free tier covers MVP scale; best data quality in Libreville |
 | Auth methods | Email + Google + Apple | Minimal friction; Apple mandatory on iOS with any OAuth |
 | Admin roles | `profiles` table | Transparent, queryable, no JWT tricks needed |
 | Deep links / Share | Branch.io | Smart links work with or without app installed |
@@ -605,3 +641,10 @@ hours per day (with overnight toggle), description FR/EN, address, `is_active`.
 | Verified badge | Removed from MVP | Everything in app is curated; global quality promise instead |
 | Monetization enforcement | Post-MVP | Manual business onboarding first; no self-service at launch |
 | Unit testing | Jest + jest-expo | Test critical pure logic: open/closed calc + WhatsApp formatter |
+| Google OAuth redirect | Hardcoded `okili://` | `makeRedirectUri()` returns Expo dev client URL in dev builds, causing PKCE mismatch |
+| Google OAuth callback parsing | Extract `code` + strip trailing `%23` | Supabase appends `#` (encoded as `%23`) to callback URL; passing full URL to `exchangeCodeForSession` sends malformed code |
+| Apple Sign-In Supabase config | Client ID = `com.okili.app` (bundle ID) | Native iOS flow; Supabase verifies `aud` claim in Apple identity token against bundle ID — NOT Team ID |
+| Supabase hand-written types | Add `Relationships: []` + `Views`/`Functions` to every table | Required by `@supabase/supabase-js` v2.99 `GenericSchema` constraint; without it all table types resolve to `never` |
+| Expo Router entry point | `import 'expo-router/entry'` in `index.ts` | Default `registerRootComponent(App)` bypasses Expo Router; shows blank "Open up App.tsx" screen |
+| EAS Build peer deps | `.npmrc` with `legacy-peer-deps=true` | Expo SDK 55 has peer dependency conflicts with npm 10 strict mode |
+| react-native-maps Google API key | Use `infoPlist.GMSApiKey` not `ios.config.googleMapsApiKey` | The latter triggers deprecated `react-native-google-maps` pod which no longer exists in `react-native-maps` 1.x |

@@ -2,7 +2,8 @@
   "tabs": {
     "home": "Home",
     "explore": "Explore",
-    "favorites": "Favorites"
+    "favorites": "Favorites",
+    "profile": "Profile"
   },
   "home": {
     "weekendTitle": "Weekend in Libreville",
@@ -18,7 +19,8 @@
       "price": "Budget"
     },
     "noResults": "No places found",
-    "noResultsHint": "Try adjusting your filters"
+    "noResultsHint": "Try adjusting your filters",
+    "nearMe": "Near me"
   },
   "place": {
     "open": "Open",
@@ -48,7 +50,15 @@
       "sat": "Saturday",
       "sun": "Sunday"
     },
-    "closedDay": "Closed"
+    "closedDay": "Closed",
+    "reviews": {
+      "title": "Reviews",
+      "noReviews": "No reviews yet",
+      "writeReview": "Write a review",
+      "editReview": "Edit my review",
+      "deleteReview": "Delete",
+      "outOf": "out of 5"
+    }
   },
   "categories": {
     "restaurant": "Restaurant",

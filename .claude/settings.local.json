@@ -4,7 +4,14 @@
       "Bash(npm install:*)",
       "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\")",
       "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --yes)",
-      "Bash(npx jest:*)"
+      "Bash(npx jest:*)",
+      "Bash(mkdir \"c:\\\\Users\\\\rapetoh\\\\Downloads\\\\Gabon Guide\\\\Gabon-guide\\\\mobile\\\\utils\")",
+      "Bash(mkdir \"c:\\\\Users\\\\rapetoh\\\\Downloads\\\\Gabon Guide\\\\Gabon-guide\\\\mobile\\\\__tests__\")",
+      "Bash(npx tsc:*)",
+      "Bash(cp \"c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/admin/place/PlaceForm.tsx\" \"c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/components/admin/PlaceForm.tsx\")",
+      "Bash(rm \"c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/admin/place/PlaceForm.tsx\")",
+      "Bash(find 'c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/supabase' -name *.sql)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
