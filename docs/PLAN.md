@@ -432,35 +432,55 @@ formatWhatsAppNumber(input) — test cases:
 
 ---
 
-## Phase 4 — Admin — Web Dashboard (`/web`)
+## Phase 4 — Admin — Web Dashboard (`/web`) ✅ COMPLETED — March 2026
 
-**Goal:** Full desktop management interface for bulk work and weekly feed curation.
+**Goal:** Full desktop management interface for bulk work and listing management.
 
-### 4.1 Auth
-- [ ] `/login` page — email/password
-- [ ] Middleware: all `/admin/*` routes require authenticated admin session
-- [ ] Logout
+### 4.1 Auth ✅
+- [x] `/login` page — Google Sign-In (primary) + email/password fallback
+- [x] `proxy.ts` (Next.js 16): all `/admin/*` routes require authenticated admin session + `is_admin = true`
+- [x] `/auth/callback` route — handles Google OAuth code exchange
+- [x] Logout
 
-### 4.2 Dashboard Pages
+**Note:** Admin account uses Google OAuth (no password). Web login has Google Sign-In button as primary method. Required adding `http://localhost:3000/auth/callback` to Supabase redirect URLs.
+
+**Note:** Next.js 16 breaking changes encountered and fixed:
+- `middleware.ts` → renamed to `proxy.ts`, export named `proxy` (not `middleware`)
+- `searchParams` in server components is a Promise → must be `await`ed
+- `useSearchParams` in client components requires `<Suspense>` boundary
+
+### 4.2 Dashboard Pages ✅
 
 | Route | Purpose |
 |---|---|
-| `/admin` | Overview: listing count, this week's feed status |
-| `/admin/places` | Table: all listings, search, filter by status/category |
+| `/admin` | Overview: stat cards (total/active/inactive/promoted) + 5 recent places |
+| `/admin/places` | Table: all listings, search, filter by All/Active/Inactive/Promoted |
 | `/admin/places/new` | Create listing form |
 | `/admin/places/[id]` | Edit listing form |
-| `/admin/places/[id]/photos` | Photo upload, reorder, set primary, delete |
-| `/admin/weekly-feed` | Pick and rank this week's spots, add FR/EN labels |
+| `/admin/places/[id]/photos` | Photo upload, set primary, delete |
 
-### 4.3 Place Form
-All fields from PRD: name, category, zone, price range, phone, WhatsApp (auto-format),
-hours per day (with overnight toggle), description FR/EN, address, `is_active`.
+**Note:** `/admin/weekly-feed` not built — "Trending Now" replaced the weekly feed (see Architecture Decision #1). Promotion is managed directly in the place edit form.
 
-### 4.4 Photo Management
-- [ ] Upload (drag and drop + file picker) → compress → Supabase Storage
-- [ ] Set primary photo
-- [ ] Delete photo
-- [ ] Preview all photos for a listing
+### 4.3 Place Form ✅
+All fields + full validation parity with mobile PlaceForm:
+- [x] Name (required, min 2, max 100), Category (required), Zone (required), Subcategory
+- [x] Price range with CFA hints (< 5 000 / 5 000–20 000 / > 20 000 FCFA)
+- [x] Phone + WhatsApp (digit count validation)
+- [x] Website (auto-normalizes bare domains to https://, validates format)
+- [x] Address (max 300 chars)
+- [x] Location link paste (Google Maps / Apple Maps / WhatsApp → extracts lat/lon)
+- [x] GPS coordinates (lat/lon manual input)
+- [x] Hours per day (open/close/closed/overnight) with time format validation
+- [x] Description FR + EN
+- [x] Promotion toggle + badge labels (FR/EN)
+- [x] Active/Inactive toggle
+- [x] Gabon bounds check TODO (commented out same as mobile — re-enable pre-launch)
+
+### 4.4 Photo Management ✅
+- [x] Upload (file picker, multiple files) → Supabase Storage
+- [x] Set primary photo (hover → "Set as primary")
+- [x] Delete photo (soft-delete in DB + remove from storage)
+- [x] Preview grid (3-column)
 
 ---
 
@@ -482,11 +502,6 @@ hours per day (with overnight toggle), description FR/EN, address, `is_active`.
 - [ ] Upload a photo for a listing → appears in mobile app detail page
 - [ ] Set a different photo as primary → mobile app detail page shows new primary photo
 - [ ] Delete a photo → gone from mobile app
-
-**Weekly feed**
-- [ ] Open `/admin/weekly-feed` → select 3 places, set ranks, add FR labels
-- [ ] Open mobile app home screen → the curated feed appears with correct labels
-- [ ] Remove the weekly feed entries → mobile app falls back to showing recent listings
 
 ---
 

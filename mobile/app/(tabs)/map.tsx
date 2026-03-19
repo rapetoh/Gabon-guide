@@ -17,10 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { usePlaces, Place } from '../../hooks/usePlaces'
 import { supabase } from '../../lib/supabase'
 
-// Cedar Rapids, Iowa (temp for testing)
+// Libreville, Gabon — city center
 const LIBREVILLE: Region = {
-  latitude: 41.9779,
-  longitude: -91.6656,
+  latitude: -0.7193,
+  longitude: 8.7815,
   latitudeDelta: 0.12,
   longitudeDelta: 0.12,
 }
@@ -89,8 +89,8 @@ export default function MapScreen() {
               tracksViewChanges={false}
             >
               {isSelected ? (
-                // Selected: dark pill label with teardrop pointer
-                <View style={styles.pinSelectedWrap}>
+                // Selected: dark pill + green dot
+                <View style={styles.pinWrap}>
                   <View style={styles.pinSelected}>
                     <Text style={styles.pinSelectedText} numberOfLines={1}>
                       {place.name.length > 14 ? place.name.slice(0, 14) + '…' : place.name}
@@ -99,8 +99,15 @@ export default function MapScreen() {
                   <View style={styles.pinSelectedDot} />
                 </View>
               ) : (
-                // Unselected: small dark dot
-                <View style={styles.pinDot} />
+                // Unselected: white pill with name + dark dot — large enough to tap
+                <View style={styles.pinWrap}>
+                  <View style={styles.pinUnselected}>
+                    <Text style={styles.pinUnselectedText} numberOfLines={1}>
+                      {place.name.length > 12 ? place.name.slice(0, 12) + '…' : place.name}
+                    </Text>
+                  </View>
+                  <View style={styles.pinDot} />
+                </View>
               )}
             </Marker>
           )
@@ -219,10 +226,31 @@ const styles = StyleSheet.create({
   },
 
   // Pins
+  pinWrap: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  pinUnselected: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  pinUnselectedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
   pinDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#1C1C1E',
     borderWidth: 2,
     borderColor: '#fff',
@@ -230,10 +258,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
-  },
-  pinSelectedWrap: {
-    alignItems: 'center',
-    gap: 2,
   },
   pinSelected: {
     paddingHorizontal: 12,
@@ -251,6 +275,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   pinSelectedDot: {
+
     width: 8,
     height: 8,
     borderRadius: 4,

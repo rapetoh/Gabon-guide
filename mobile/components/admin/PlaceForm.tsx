@@ -3,6 +3,7 @@ import { decode } from 'base64-arraybuffer'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
+import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +38,13 @@ const DAY_LABELS: Record<string, { fr: string; en: string }> = {
   sun: { fr: 'Dim', en: 'Sun' },
 }
 
+// CFA price range guidance
+const PRICE_LABELS = {
+  1: { fr: 'Économique', en: 'Budget', hint: '< 5 000 FCFA' },
+  2: { fr: 'Intermédiaire', en: 'Mid-range', hint: '5 000–20 000 FCFA' },
+  3: { fr: 'Haut de gamme', en: 'Upscale', hint: '> 20 000 FCFA' },
+} as const
+
 type DayHours = { open: string; close: string; overnight: boolean; closed: boolean }
 type Hours = Record<string, DayHours>
 
@@ -57,17 +65,28 @@ export function PlaceForm({ mode, placeId }: Props) {
   const { data: existing } = usePlace(placeId ?? '')
 
   // Basic fields
-  const [name, setName]               = useState('')
-  const [descFr, setDescFr]           = useState('')
-  const [descEn, setDescEn]           = useState('')
-  const [categoryId, setCategoryId]   = useState('')
-  const [zoneId, setZoneId]           = useState('')
-  const [priceRange, setPriceRange]   = useState<1|2|3>(2)
-  const [phone, setPhone]             = useState('')
-  const [whatsapp, setWhatsapp]       = useState('')
-  const [address, setAddress]         = useState('')
-  const [website, setWebsite]         = useState('')
-  const [isActive, setIsActive]       = useState(true)
+  const [name, setName]             = useState('')
+  const [descFr, setDescFr]         = useState('')
+  const [descEn, setDescEn]         = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [zoneId, setZoneId]         = useState('')
+  const [priceRange, setPriceRange] = useState<1|2|3>(2)
+  const [phone, setPhone]           = useState('')
+  const [whatsapp, setWhatsapp]     = useState('')
+  const [address, setAddress]       = useState('')
+  const [website, setWebsite]       = useState('')
+  // New places default to INACTIVE — prevents incomplete listings going live accidentally
+  const [isActive, setIsActive]         = useState(mode === 'edit')
+  // Promotion — paid feature, admin-controlled
+  const [isPromoted, setIsPromoted]         = useState(false)
+  const [promotedLabelFr, setPromotedLabelFr] = useState('')
+  const [promotedLabelEn, setPromotedLabelEn] = useState('')
+
+  // Location
+  const [latitude, setLatitude]   = useState<number | null>(null)
+  const [longitude, setLongitude] = useState<number | null>(null)
+  const [locLoading, setLocLoading] = useState(false)
+  const [locationLink, setLocationLink] = useState('')
 
   // Hours
   const [hours, setHours] = useState<Hours>(() =>
@@ -78,6 +97,9 @@ export function PlaceForm({ mode, placeId }: Props) {
   const [photos, setPhotos] = useState<{ uri: string; isNew: boolean; isPrimary: boolean; storageId?: string; storagePath?: string }[]>([])
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Validation errors
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Pre-fill when editing
   useEffect(() => {
@@ -93,12 +115,16 @@ export function PlaceForm({ mode, placeId }: Props) {
       setWhatsapp(p.whatsapp ?? '')
       setAddress(p.address ?? '')
       setWebsite(p.website ?? '')
-      setIsActive(p.is_active ?? true)
+      setIsActive(p.is_active ?? false)
+      setIsPromoted(p.is_promoted ?? false)
+      setPromotedLabelFr(p.promoted_label_fr ?? '')
+      setPromotedLabelEn(p.promoted_label_en ?? '')
+      if (p.latitude) setLatitude(p.latitude)
+      if (p.longitude) setLongitude(p.longitude)
       if (p.hours) {
-        const merged = Object.fromEntries(
+        setHours(Object.fromEntries(
           DAY_KEYS.map(d => [d, { ...DEFAULT_DAY, ...(p.hours[d] ?? { closed: true }) }])
-        )
-        setHours(merged)
+        ))
       }
       if (p.photos?.length) {
         setPhotos(p.photos.map((ph: any) => ({
@@ -116,6 +142,75 @@ export function PlaceForm({ mode, placeId }: Props) {
     setHours(h => ({ ...h, [day]: { ...h[day], [field]: value } }))
   }
 
+  // Parses coordinates from a Google Maps, Apple Maps, or WhatsApp location share link.
+  // Handles the most common real-world share formats.
+  function parseLocationLink(link: string): { lat: number; lng: number } | null {
+    const patterns = [
+      // Google Maps short: maps.google.com/?q=lat,lng
+      /[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+      // Google Maps long: /@lat,lng,zoom
+      /\/@(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+      // Apple Maps: ?ll=lat,lng
+      /[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+      // Generic fallback: two decimal coords in URL
+      /(-?\d{1,3}\.\d{4,}),(-?\d{1,3}\.\d{4,})/,
+    ]
+    for (const re of patterns) {
+      const m = link.match(re)
+      if (m) {
+        const lat = parseFloat(m[1])
+        const lng = parseFloat(m[2])
+        if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+          return { lat, lng }
+        }
+      }
+    }
+    return null
+  }
+
+  function applyLocationLink() {
+    const result = parseLocationLink(locationLink.trim())
+    if (!result) {
+      setErrors(e => ({
+        ...e,
+        locationLink: lang === 'fr'
+          ? 'Lien non reconnu. Essayez un lien Google Maps ou Apple Plans.'
+          : 'Link not recognized. Try a Google Maps or Apple Maps link.',
+      }))
+      return
+    }
+    setLatitude(result.lat)
+    setLongitude(result.lng)
+    setLocationLink('')
+    setErrors(e => ({ ...e, locationLink: '', location: '' }))
+  }
+
+  // GPS capture — admin walks to the restaurant and taps this button
+  async function captureLocation() {
+    setLocLoading(true)
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert(
+          lang === 'fr' ? 'Permission refusée' : 'Permission denied',
+          lang === 'fr'
+            ? 'Activez la localisation dans les réglages pour utiliser cette fonctionnalité.'
+            : 'Enable location in settings to use this feature.'
+        )
+        return
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      setLatitude(loc.coords.latitude)
+      setLongitude(loc.coords.longitude)
+      setErrors(e => ({ ...e, location: '' }))
+    } catch {
+      Alert.alert(lang === 'fr' ? 'Erreur GPS' : 'GPS error',
+        lang === 'fr' ? 'Impossible d\'obtenir la position.' : 'Could not get location.')
+    } finally {
+      setLocLoading(false)
+    }
+  }
+
   async function pickPhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -123,7 +218,6 @@ export function PlaceForm({ mode, placeId }: Props) {
     })
     if (result.canceled) return
     const asset = result.assets[0]
-    // Compress: max 1200px wide, 80% JPEG quality
     const compressed = await ImageManipulator.manipulateAsync(
       asset.uri,
       [{ resize: { width: 1200 } }],
@@ -149,7 +243,6 @@ export function PlaceForm({ mode, placeId }: Props) {
   function removePhoto(idx: number) {
     setPhotos(prev => {
       const updated = prev.filter((_, i) => i !== idx)
-      // If removed was primary, make first remaining primary
       if (prev[idx].isPrimary && updated.length > 0) updated[0].isPrimary = true
       return updated
     })
@@ -159,43 +252,142 @@ export function PlaceForm({ mode, placeId }: Props) {
     setPhotos(prev => prev.map((p, i) => ({ ...p, isPrimary: i === idx })))
   }
 
+  function normalizePhone(value: string): string {
+    // Strip all non-digits
+    const digits = value.replace(/\D/g, '')
+    if (!digits) return value
+    // Already international (241XXXXXXXX)
+    if (digits.startsWith('241') && digits.length >= 11) return `+${digits}`
+    // Local format (0XXXXXXXXX)
+    if (digits.startsWith('0') && digits.length >= 9) return `+241${digits.slice(1)}`
+    // 8-digit without prefix
+    if (digits.length === 8) return `+241${digits}`
+    return value
+  }
+
+  function validatePhone(value: string): string | null {
+    if (!value.trim()) return null
+    const digits = value.replace(/\D/g, '')
+    if (digits.length < 8 || digits.length > 12) {
+      return lang === 'fr'
+        ? 'Numéro invalide. Ex: 077 12 34 56 ou +241 77 12 34 56'
+        : 'Invalid number. Ex: 077 12 34 56 or +241 77 12 34 56'
+    }
+    return null
+  }
+
+  function normalizeWebsite(value: string): string {
+    const v = value.trim()
+    if (!v) return v
+    if (/^https?:\/\//i.test(v)) return v
+    if (v.startsWith('www.')) return `https://${v}`
+    // bare domain or path — prepend https
+    if (v.includes('.') || v.startsWith('@')) return `https://${v}`
+    return v
+  }
+
+  function validateWebsite(value: string): string | null {
+    if (!value.trim()) return null
+    const v = normalizeWebsite(value)
+    // Must be https://something.tld — requires at least one dot after the protocol+host
+    if (!/^https?:\/\/[^/]+\.[^/]{2,}/.test(v)) {
+      return lang === 'fr'
+        ? 'Lien invalide. Ex: instagram.com/lepatio ou https://lepatio.ga'
+        : 'Invalid link. Ex: instagram.com/lepatio or https://lepatio.ga'
+    }
+    return null
+  }
+
+  function validateTimeFormat(value: string): boolean {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+  }
+
+  function validate(): boolean {
+    const newErrors: Record<string, string> = {}
+
+    if (!name.trim()) {
+      newErrors.name = lang === 'fr' ? 'Le nom est requis' : 'Name is required'
+    } else if (name.trim().length < 2) {
+      newErrors.name = lang === 'fr' ? 'Minimum 2 caractères' : 'Minimum 2 characters'
+    } else if (name.trim().length > 100) {
+      newErrors.name = lang === 'fr' ? 'Maximum 100 caractères' : 'Maximum 100 characters'
+    }
+
+    if (address.trim().length > 300) {
+      newErrors.address = lang === 'fr' ? 'Maximum 300 caractères' : 'Maximum 300 characters'
+    }
+
+    // TODO (pre-launch): re-enable Gabon bounding box check once development is done
+    // if (latitude !== null && longitude !== null) {
+    //   const inGabon = latitude >= -4 && latitude <= 2.5 && longitude >= 8.5 && longitude <= 14.5
+    //   if (!inGabon) newErrors.location = '...'
+    // }
+
+    if (!categoryId) {
+      newErrors.category = lang === 'fr' ? 'Sélectionnez une catégorie' : 'Select a category'
+    }
+
+    if (!zoneId) {
+      newErrors.zone = lang === 'fr' ? 'Sélectionnez une zone' : 'Select a zone'
+    }
+
+    const phoneErr = validatePhone(phone)
+    if (phoneErr) newErrors.phone = phoneErr
+
+    const whatsappErr = validatePhone(whatsapp)
+    if (whatsappErr) newErrors.whatsapp = whatsappErr
+
+    const websiteErr = validateWebsite(website)
+    if (websiteErr) newErrors.website = websiteErr
+
+    DAY_KEYS.forEach(day => {
+      const h = hours[day]
+      if (!h.closed) {
+        if (!validateTimeFormat(h.open))
+          newErrors[`hours_${day}_open`] = 'HH:MM'
+        if (!validateTimeFormat(h.close))
+          newErrors[`hours_${day}_close`] = 'HH:MM'
+      }
+    })
+
+    setErrors(newErrors)
+    if (Object.keys(newErrors).length > 0) {
+      // Scroll hint
+      Alert.alert(
+        lang === 'fr' ? 'Champs invalides' : 'Invalid fields',
+        lang === 'fr'
+          ? 'Corrigez les champs en rouge avant de sauvegarder.'
+          : 'Fix the highlighted fields before saving.'
+      )
+      return false
+    }
+    return true
+  }
+
   async function handleSave() {
-    if (!name.trim()) { Alert.alert(lang === 'fr' ? 'Nom requis' : 'Name required'); return }
-    if (!categoryId) { Alert.alert(lang === 'fr' ? 'Catégorie requise' : 'Category required'); return }
-    if (!zoneId) { Alert.alert(lang === 'fr' ? 'Zone requise' : 'Zone required'); return }
+    if (!validate()) return
 
     setSaving(true)
     try {
-      const payload = {
-        name: name.trim(),
-        description_fr: descFr.trim() || null,
-        description_en: descEn.trim() || null,
-        category_id: categoryId,
-        zone_id: zoneId,
-        price_range: priceRange,
-        phone: phone.trim() || null,
-        whatsapp: whatsapp.trim() || null,
-        address: address.trim() || null,
-        website: website.trim() || null,
-        is_active: isActive,
-        hours,
+      // For create mode: generate the ID client-side so we can upload photos BEFORE
+      // writing the place row. This guarantees that if a photo upload fails, no
+      // orphaned place row is left in the database.
+      // Note: crypto.randomUUID() is not available in Hermes — use manual UUID v4.
+      function uuidv4() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = Math.random() * 16 | 0
+          const v = c === 'x' ? r : (r & 0x3 | 0x8)
+          return v.toString(16)
+        })
       }
+      const targetId = mode === 'create' ? uuidv4() : placeId!
 
-      let targetId = placeId
-      if (mode === 'create') {
-        const { data, error } = await supabase.from('places').insert(payload as any).select('id').single()
-        if (error) throw error
-        targetId = data.id
-      } else {
-        const { error } = await supabase.from('places').update(payload as any).eq('id', placeId!)
-        if (error) throw error
-      }
-
-      // Upload new photos
+      // --- Upload new photos first (create) or alongside (edit) ---
       setUploading(true)
-      for (let i = 0; i < photos.length; i++) {
-        const photo = photos[i]
-        if (!photo.isNew) continue
+      const photoInserts: { storage_path: string; is_primary: boolean; position: number }[] = []
+      const newPhotos = photos.filter(p => p.isNew)
+      for (let i = 0; i < newPhotos.length; i++) {
+        const photo = newPhotos[i]
         const fileName = `${targetId}/${Date.now()}_${i}.jpg`
         const base64 = await FileSystem.readAsStringAsync(photo.uri, {
           encoding: FileSystem.EncodingType.Base64,
@@ -204,16 +396,46 @@ export function PlaceForm({ mode, placeId }: Props) {
           .from('place-photos')
           .upload(fileName, decode(base64), { contentType: 'image/jpeg', upsert: false })
         if (uploadError) throw uploadError
-        await supabase.from('photos').insert({
-          place_id: targetId!,
-          storage_path: fileName,
-          is_primary: photo.isPrimary,
-          position: i,
-        } as any)
+        photoInserts.push({ storage_path: fileName, is_primary: photo.isPrimary, position: i })
+      }
+
+      // --- Write place row only after all photos are safely in storage ---
+      const payload = {
+        name: name.trim(),
+        description_fr: descFr.trim() || null,
+        description_en: descEn.trim() || null,
+        category_id: categoryId,
+        zone_id: zoneId,
+        price_range: priceRange,
+        phone: phone.trim() ? normalizePhone(phone) : null,
+        whatsapp: whatsapp.trim() ? normalizePhone(whatsapp) : null,
+        address: address.trim() || null,
+        website: website.trim() ? normalizeWebsite(website) : null,
+        is_active: isActive,
+        is_promoted: isPromoted,
+        promoted_label_fr: isPromoted ? (promotedLabelFr.trim() || null) : null,
+        promoted_label_en: isPromoted ? (promotedLabelEn.trim() || null) : null,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
+        hours,
+      }
+
+      if (mode === 'create') {
+        const { error } = await supabase.from('places').insert({ id: targetId, ...payload } as any)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('places').update(payload as any).eq('id', targetId)
+        if (error) throw error
+      }
+
+      // --- Insert photo rows now that both storage objects and place row exist ---
+      for (const p of photoInserts) {
+        await supabase.from('photos').insert({ place_id: targetId, ...p } as any)
       }
 
       queryClient.invalidateQueries({ queryKey: ['places'] })
       queryClient.invalidateQueries({ queryKey: ['adminPlaces'] })
+      queryClient.invalidateQueries({ queryKey: ['trendingPlaces'] })
       if (placeId) queryClient.invalidateQueries({ queryKey: ['place', placeId] })
 
       router.back()
@@ -259,9 +481,18 @@ export function PlaceForm({ mode, placeId }: Props) {
           {/* Active toggle */}
           <View style={styles.card}>
             <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>
-                {lang === 'fr' ? 'Lieu actif (visible dans l\'app)' : 'Active (visible in app)'}
-              </Text>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={styles.switchLabel}>
+                  {lang === 'fr' ? 'Lieu actif (visible dans l\'app)' : 'Active (visible in app)'}
+                </Text>
+                {mode === 'create' && (
+                  <Text style={styles.fieldHint}>
+                    {lang === 'fr'
+                      ? 'Désactivé par défaut — activez uniquement quand toutes les infos sont complètes.'
+                      : 'Off by default — activate only when all information is complete.'}
+                  </Text>
+                )}
+              </View>
               <Switch
                 value={isActive}
                 onValueChange={setIsActive}
@@ -270,12 +501,78 @@ export function PlaceForm({ mode, placeId }: Props) {
             </View>
           </View>
 
+          {/* Promotion — paid feature */}
+          <View style={[styles.card, isPromoted && styles.cardPromoted]}>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, gap: 3 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.switchLabel}>
+                    {lang === 'fr' ? 'Lieu mis en avant' : 'Promoted place'}
+                  </Text>
+                  {isPromoted && (
+                    <View style={styles.promotedTag}>
+                      <Text style={styles.promotedTagText}>
+                        {lang === 'fr' ? 'Payant' : 'Paid'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.fieldHint}>
+                  {lang === 'fr'
+                    ? 'Apparaît en tête de "Tendances" avec un badge — réservé aux partenaires payants'
+                    : 'Appears at the top of "Trending Now" with a badge — reserved for paying partners'}
+                </Text>
+              </View>
+              <Switch
+                value={isPromoted}
+                onValueChange={setIsPromoted}
+                trackColor={{ true: '#FF9500' }}
+              />
+            </View>
+            {isPromoted && (
+              <>
+                <Field
+                  label={lang === 'fr' ? 'Badge (français)' : 'Badge (French)'}
+                  value={promotedLabelFr}
+                  onChange={setPromotedLabelFr}
+                  placeholder={lang === 'fr' ? 'Ex: Partenaire, À la une, Coup de cœur...' : 'Ex: Partenaire, À la une, Coup de cœur...'}
+                  hint={lang === 'fr' ? 'Laissez vide pour afficher "Partenaire" par défaut' : 'Leave blank to show "Partenaire" by default'}
+                />
+                <Field
+                  label={lang === 'fr' ? 'Badge (anglais)' : 'Badge (English)'}
+                  value={promotedLabelEn}
+                  onChange={setPromotedLabelEn}
+                  placeholder="Ex: Partner, Featured, Staff Pick..."
+                  hint={lang === 'fr' ? 'Laissez vide pour afficher "Partner" par défaut' : 'Leave blank to show "Partner" by default'}
+                />
+              </>
+            )}
+          </View>
+
           {/* Basic info */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Informations' : 'Info'}</Text>
-            <Field label={lang === 'fr' ? 'Nom *' : 'Name *'} value={name} onChange={setName} />
-            <Field label={lang === 'fr' ? 'Description (français)' : 'Description (French)'} value={descFr} onChange={setDescFr} multiline />
-            <Field label={lang === 'fr' ? 'Description (anglais)' : 'Description (English)'} value={descEn} onChange={setDescEn} multiline />
+            <Field
+              label={lang === 'fr' ? 'Nom *' : 'Name *'}
+              value={name}
+              onChange={v => { setName(v); setErrors(e => ({ ...e, name: '' })) }}
+              placeholder={lang === 'fr' ? 'Ex: Le Patio, Moka Café...' : 'Ex: Le Patio, Moka Café...'}
+              error={errors.name}
+            />
+            <Field
+              label={lang === 'fr' ? 'Description (français)' : 'Description (French)'}
+              value={descFr}
+              onChange={setDescFr}
+              multiline
+              placeholder={lang === 'fr' ? 'Ambiance, spécialités, ce qui rend ce lieu unique...' : 'Atmosphere, specialties, what makes this place unique...'}
+            />
+            <Field
+              label={lang === 'fr' ? 'Description (anglais)' : 'Description (English)'}
+              value={descEn}
+              onChange={setDescEn}
+              multiline
+              placeholder="Atmosphere, specialties, what makes this place unique..."
+            />
           </View>
 
           {/* Category */}
@@ -286,7 +583,7 @@ export function PlaceForm({ mode, placeId }: Props) {
                 <Pressable
                   key={cat.id}
                   style={[styles.chip, categoryId === cat.id && styles.chipActive]}
-                  onPress={() => setCategoryId(cat.id)}
+                  onPress={() => { setCategoryId(cat.id); setErrors(e => ({ ...e, category: '' })) }}
                 >
                   <Text style={[styles.chipText, categoryId === cat.id && styles.chipTextActive]}>
                     {lang === 'fr' ? cat.name_fr : cat.name_en}
@@ -294,17 +591,23 @@ export function PlaceForm({ mode, placeId }: Props) {
                 </Pressable>
               ))}
             </View>
+            {errors.category ? <Text style={styles.fieldError}>{errors.category}</Text> : null}
           </View>
 
           {/* Zone */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Zone *' : 'Zone *'}</Text>
+            <Text style={styles.fieldHint}>
+              {lang === 'fr'
+                ? 'Secteur de Libreville où se trouve le lieu'
+                : 'Area of Libreville where the place is located'}
+            </Text>
             <View style={styles.chipRow}>
               {zones?.map(zone => (
                 <Pressable
                   key={zone.id}
                   style={[styles.chip, zoneId === zone.id && styles.chipActive]}
-                  onPress={() => setZoneId(zone.id)}
+                  onPress={() => { setZoneId(zone.id); setErrors(e => ({ ...e, zone: '' })) }}
                 >
                   <Text style={[styles.chipText, zoneId === zone.id && styles.chipTextActive]}>
                     {zone.name}
@@ -312,45 +615,190 @@ export function PlaceForm({ mode, placeId }: Props) {
                 </Pressable>
               ))}
             </View>
+            {errors.zone ? <Text style={styles.fieldError}>{errors.zone}</Text> : null}
           </View>
 
           {/* Price range */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Gamme de prix' : 'Price Range'}</Text>
             <View style={styles.chipRow}>
-              {([1,2,3] as const).map(p => {
-                const labels = {
-                  1: { fr: 'Économique', en: 'Budget' },
-                  2: { fr: 'Intermédiaire', en: 'Mid-range' },
-                  3: { fr: 'Haut de gamme', en: 'Upscale' },
-                }
-                return (
-                  <Pressable
-                    key={p}
-                    style={[styles.chip, priceRange === p && styles.chipActive]}
-                    onPress={() => setPriceRange(p)}
-                  >
-                    <Text style={[styles.chipText, priceRange === p && styles.chipTextActive]}>
-                      {labels[p][lang]}
-                    </Text>
-                  </Pressable>
-                )
-              })}
+              {([1,2,3] as const).map(p => (
+                <Pressable
+                  key={p}
+                  style={[styles.priceChip, priceRange === p && styles.chipActive]}
+                  onPress={() => setPriceRange(p)}
+                >
+                  <Text style={[styles.chipText, priceRange === p && styles.chipTextActive]}>
+                    {PRICE_LABELS[p][lang]}
+                  </Text>
+                  <Text style={[styles.priceHint, priceRange === p && { color: 'rgba(255,255,255,0.8)' }]}>
+                    {PRICE_LABELS[p].hint}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
+          </View>
+
+          {/* Location */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>
+              {lang === 'fr' ? 'Localisation' : 'Location'}
+            </Text>
+            <Text style={styles.fieldHint}>
+              {lang === 'fr'
+                ? 'Rendez-vous physiquement au lieu, puis appuyez sur "Capturer ma position". Le pin sur la carte sera placé exactement à cet endroit.'
+                : 'Go physically to the place, then tap "Capture my location". The map pin will be placed exactly there.'}
+            </Text>
+
+            {/* GPS button */}
+            <Pressable
+              style={[styles.locationBtn, locLoading && { opacity: 0.6 }]}
+              onPress={captureLocation}
+              disabled={locLoading}
+            >
+              {locLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="locate" size={18} color="#fff" />
+              }
+              <Text style={styles.locationBtnText}>
+                {latitude
+                  ? (lang === 'fr' ? 'Recapturer ma position' : 'Recapture my location')
+                  : (lang === 'fr' ? 'Capturer ma position' : 'Capture my location')}
+              </Text>
+            </Pressable>
+
+            {/* Show captured coordinates */}
+            {latitude && longitude ? (
+              <View style={styles.coordsRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+                <Text style={styles.coordsText}>
+                  {latitude.toFixed(5)}, {longitude.toFixed(5)}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.coordsRow}>
+                <Ionicons name="warning-outline" size={16} color="#FF9500" />
+                <Text style={[styles.coordsText, { color: '#FF9500' }]}>
+                  {lang === 'fr'
+                    ? 'Pas de coordonnées — le lieu n\'apparaîtra pas sur la carte'
+                    : 'No coordinates — place won\'t appear on the map'}
+                </Text>
+              </View>
+            )}
+
+            {errors.location ? <Text style={styles.fieldError}>{errors.location}</Text> : null}
+
+            {/* Paste a location link — alternative to GPS */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                {lang === 'fr' ? 'Ou coller un lien de localisation' : 'Or paste a location link'}
+              </Text>
+              <Text style={styles.fieldHint}>
+                {lang === 'fr'
+                  ? 'Lien partagé depuis Google Maps, Plans (Apple) ou WhatsApp'
+                  : 'Link shared from Google Maps, Apple Maps, or WhatsApp'}
+              </Text>
+              <View style={styles.linkInputRow}>
+                <TextInput
+                  style={[
+                    styles.fieldInput,
+                    { flex: 1 },
+                    errors.locationLink ? styles.fieldInputError : null,
+                  ]}
+                  value={locationLink}
+                  onChangeText={v => { setLocationLink(v); setErrors(e => ({ ...e, locationLink: '' })) }}
+                  placeholder="https://maps.google.com/..."
+                  placeholderTextColor="#C7C7CC"
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable
+                  style={[styles.linkApplyBtn, !locationLink.trim() && { opacity: 0.4 }]}
+                  onPress={applyLocationLink}
+                  disabled={!locationLink.trim()}
+                >
+                  <Ionicons name="checkmark" size={18} color="#fff" />
+                </Pressable>
+              </View>
+              {errors.locationLink ? <Text style={styles.fieldError}>{errors.locationLink}</Text> : null}
+            </View>
+
+            {/* Landmark text — human-readable, shown to users */}
+            <Field
+              label={lang === 'fr' ? 'Repère / Adresse' : 'Landmark / Address'}
+              value={address}
+              onChange={v => { setAddress(v); setErrors(e => ({ ...e, address: '' })) }}
+              placeholder={lang === 'fr'
+                ? 'Ex: En face du Port, côté Total Derrière Wharf'
+                : 'Ex: Opposite the Port, near Total Derrière Wharf'}
+              hint={lang === 'fr'
+                ? 'Description que verront les utilisateurs — pas besoin d\'adresse précise, un repère suffit'
+                : 'Description users will see — no need for a precise address, a landmark is enough'}
+              error={errors.address}
+            />
           </View>
 
           {/* Contact */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Contact' : 'Contact'}</Text>
-            <Field label={lang === 'fr' ? 'Téléphone' : 'Phone'} value={phone} onChange={setPhone} keyboard="phone-pad" />
-            <Field label="WhatsApp" value={whatsapp} onChange={setWhatsapp} keyboard="phone-pad" placeholder="24101234567" />
-            <Field label={lang === 'fr' ? 'Adresse' : 'Address'} value={address} onChange={setAddress} />
-            <Field label="Website" value={website} onChange={setWebsite} keyboard="url" placeholder="https://..." />
+            <Field
+              label={lang === 'fr' ? 'Téléphone' : 'Phone'}
+              value={phone}
+              onChange={v => { setPhone(v); setErrors(e => ({ ...e, phone: '' })) }}
+              keyboard="phone-pad"
+              placeholder="Ex: 077 12 34 56"
+              hint={lang === 'fr'
+                ? 'Format gabonais — le numéro sera automatiquement formaté en +241XXXXXXXX'
+                : 'Gabonese format — number will be auto-formatted to +241XXXXXXXX'}
+              error={errors.phone}
+            />
+            <View style={styles.whatsappHeader}>
+              <Text style={styles.fieldLabel}>WhatsApp</Text>
+              {phone.trim() && (
+                <Pressable
+                  onPress={() => { setWhatsapp(phone); setErrors(e => ({ ...e, whatsapp: '' })) }}
+                  style={styles.sameAsPhoneBtn}
+                >
+                  <Ionicons name="copy-outline" size={13} color="#E8571A" />
+                  <Text style={styles.sameAsPhoneText}>
+                    {lang === 'fr' ? 'Même que téléphone' : 'Same as phone'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+            <Field
+              label=""
+              value={whatsapp}
+              onChange={v => { setWhatsapp(v); setErrors(e => ({ ...e, whatsapp: '' })) }}
+              keyboard="phone-pad"
+              placeholder="Ex: 077 12 34 56"
+              hint={lang === 'fr'
+                ? 'Le bouton "Chat" de la fiche ouvre directement cette conversation WhatsApp'
+                : 'The "Chat" button on the listing opens this WhatsApp conversation directly'}
+              error={errors.whatsapp}
+            />
+            <Field
+              label={lang === 'fr' ? 'Site web / Réseaux sociaux' : 'Website / Social media'}
+              value={website}
+              onChange={v => { setWebsite(v); setErrors(e => ({ ...e, website: '' })) }}
+              keyboard="url"
+              placeholder="Ex: instagram.com/lepatio ou https://lepatio.ga"
+              hint={lang === 'fr'
+                ? 'Site web, Instagram, Facebook — le lien sera complété automatiquement si besoin'
+                : 'Website, Instagram, Facebook — link will be completed automatically if needed'}
+              error={errors.website}
+            />
           </View>
 
           {/* Hours */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Horaires' : 'Hours'}</Text>
+            <Text style={styles.fieldHint}>
+              {lang === 'fr'
+                ? 'Format 24h — ex: 09:00 à 22:00. Activez 🌙 si le lieu ferme après minuit.'
+                : '24h format — ex: 09:00 to 22:00. Enable 🌙 if the place closes after midnight.'}
+            </Text>
             {DAY_KEYS.map(day => {
               const h = hours[day]
               return (
@@ -365,26 +813,34 @@ export function PlaceForm({ mode, placeId }: Props) {
                   {!h.closed && (
                     <>
                       <TextInput
-                        style={styles.timeInput}
+                        style={[styles.timeInput, errors[`hours_${day}_open`] ? styles.fieldInputError : null]}
                         value={h.open}
-                        onChangeText={v => updateDay(day, 'open', v)}
+                        onChangeText={v => { updateDay(day, 'open', v); setErrors(e => ({ ...e, [`hours_${day}_open`]: '' })) }}
                         placeholder="09:00"
                         placeholderTextColor="#C7C7CC"
                       />
                       <Text style={styles.timeSep}>–</Text>
                       <TextInput
-                        style={styles.timeInput}
+                        style={[styles.timeInput, errors[`hours_${day}_close`] ? styles.fieldInputError : null]}
                         value={h.close}
-                        onChangeText={v => updateDay(day, 'close', v)}
+                        onChangeText={v => { updateDay(day, 'close', v); setErrors(e => ({ ...e, [`hours_${day}_close`]: '' })) }}
                         placeholder="22:00"
                         placeholderTextColor="#C7C7CC"
                       />
-                      <Pressable onPress={() => updateDay(day, 'overnight', !h.overnight)}>
+                      <Pressable
+                        style={styles.overnightBtn}
+                        onPress={() => updateDay(day, 'overnight', !h.overnight)}
+                      >
                         <Ionicons
                           name={h.overnight ? 'moon' : 'moon-outline'}
-                          size={18}
+                          size={16}
                           color={h.overnight ? '#5856D6' : '#C7C7CC'}
                         />
+                        {h.overnight && (
+                          <Text style={styles.overnightLabel}>
+                            {lang === 'fr' ? 'Après minuit' : 'After midnight'}
+                          </Text>
+                        )}
                       </Pressable>
                     </>
                   )}
@@ -399,13 +855,18 @@ export function PlaceForm({ mode, placeId }: Props) {
           {/* Photos */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Photos' : 'Photos'}</Text>
+            <Text style={styles.fieldHint}>
+              {lang === 'fr'
+                ? 'Prenez les photos sur place ou importez depuis votre galerie. La ★ définit la photo principale affichée en tête de fiche.'
+                : 'Take photos on-site or import from your gallery. ★ sets the primary photo shown at the top of the listing.'}
+            </Text>
             <View style={styles.photoGrid}>
               {photos.map((photo, idx) => (
                 <View key={idx} style={styles.photoWrap}>
                   <Image source={{ uri: photo.uri }} style={styles.photoThumb} />
                   {photo.isPrimary && (
                     <View style={styles.primaryBadge}>
-                      <Text style={styles.primaryBadgeText}>✓</Text>
+                      <Text style={styles.primaryBadgeText}>★</Text>
                     </View>
                   )}
                   <View style={styles.photoActions}>
@@ -429,9 +890,6 @@ export function PlaceForm({ mode, placeId }: Props) {
                 <Text style={styles.addPhotoText}>{lang === 'fr' ? 'Caméra' : 'Camera'}</Text>
               </Pressable>
             </View>
-            <Text style={styles.photoHint}>
-              {lang === 'fr' ? '★ = photo principale · Photos compressées automatiquement' : '★ = primary photo · Photos auto-compressed'}
-            </Text>
           </View>
 
           <View style={{ height: 40 }} />
@@ -443,7 +901,7 @@ export function PlaceForm({ mode, placeId }: Props) {
 
 function Field({
   label, value, onChange, multiline = false,
-  keyboard = 'default', placeholder,
+  keyboard = 'default', placeholder, hint, error,
 }: {
   label: string
   value: string
@@ -451,12 +909,19 @@ function Field({
   multiline?: boolean
   keyboard?: any
   placeholder?: string
+  hint?: string
+  error?: string
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
       <TextInput
-        style={[styles.fieldInput, multiline && styles.fieldInputMulti]}
+        style={[
+          styles.fieldInput,
+          multiline && styles.fieldInputMulti,
+          error ? styles.fieldInputError : null,
+        ]}
         value={value}
         onChangeText={onChange}
         multiline={multiline}
@@ -465,6 +930,7 @@ function Field({
         placeholder={placeholder}
         placeholderTextColor="#C7C7CC"
       />
+      {error ? <Text style={styles.fieldError}>{error}</Text> : null}
     </View>
   )
 }
@@ -489,51 +955,93 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   form: { padding: 16, gap: 12 },
-  card: {
-    backgroundColor: '#fff', borderRadius: 16,
-    padding: 16, gap: 12,
-  },
+  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1C1C1E' },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  switchLabel: { fontSize: 14, color: '#3C3C43', flex: 1 },
-  field: { gap: 6 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  switchLabel: { fontSize: 14, color: '#3C3C43', fontWeight: '500' },
+  cardPromoted: { borderWidth: 1.5, borderColor: '#FF9500' },
+  promotedTag: {
+    backgroundColor: 'rgba(255,149,0,0.12)',
+    paddingHorizontal: 7, paddingVertical: 2,
+    borderRadius: 6,
+  },
+  promotedTagText: { fontSize: 10, fontWeight: '700', color: '#FF9500' },
+  field: { gap: 4 },
   fieldLabel: { fontSize: 12, fontWeight: '600', color: '#8E8E93', textTransform: 'uppercase', letterSpacing: 0.3 },
+  fieldHint: { fontSize: 12, color: '#8E8E93', lineHeight: 17 },
   fieldInput: {
     backgroundColor: '#F2F2F7', borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10,
     fontSize: 15, color: '#1C1C1E',
   },
   fieldInputMulti: { minHeight: 80, textAlignVertical: 'top' },
+  fieldInputError: { borderWidth: 1.5, borderColor: '#FF3B30', backgroundColor: '#FFF5F5' },
+  fieldError: { fontSize: 12, color: '#FF3B30', marginTop: 2 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 20, backgroundColor: '#F2F2F7',
   },
+  priceChip: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 12, backgroundColor: '#F2F2F7',
+    alignItems: 'center', gap: 2,
+  },
   chipActive: { backgroundColor: '#E8571A' },
-  chipText: { fontSize: 13, fontWeight: '500', color: '#3C3C43' },
-  chipTextActive: { color: '#fff', fontWeight: '600' },
+  chipText: { fontSize: 13, fontWeight: '600', color: '#3C3C43' },
+  chipTextActive: { color: '#fff' },
+  priceHint: { fontSize: 10, color: '#8E8E93' },
+  // Location
+  locationBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#1C1C1E', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    justifyContent: 'center',
+  },
+  locationBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  coordsRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  coordsText: { fontSize: 12, color: '#34C759', fontWeight: '500' },
+  // Location link paste
+  linkInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  linkApplyBtn: {
+    width: 42, height: 42, borderRadius: 10,
+    backgroundColor: '#1C1C1E',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // WhatsApp same-as-phone
+  whatsappHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sameAsPhoneBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3,
+    backgroundColor: 'rgba(232,87,26,0.08)', borderRadius: 8,
+  },
+  sameAsPhoneText: { fontSize: 11, color: '#E8571A', fontWeight: '600' },
+  // Hours
   dayRow: {
     flexDirection: 'row', alignItems: 'center',
-    gap: 8, paddingVertical: 4,
+    gap: 6, paddingVertical: 4,
     borderTopWidth: 1, borderTopColor: '#F2F2F7',
   },
   dayName: { width: 32, fontSize: 13, fontWeight: '600', color: '#1C1C1E' },
   timeInput: {
     backgroundColor: '#F2F2F7', borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 6,
-    fontSize: 13, color: '#1C1C1E', width: 58, textAlign: 'center',
+    fontSize: 13, color: '#1C1C1E', width: 56, textAlign: 'center',
   },
   timeSep: { fontSize: 13, color: '#8E8E93' },
-  closedText: { fontSize: 13, color: '#C7C7CC', marginLeft: 8 },
+  overnightBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  overnightLabel: { fontSize: 10, color: '#5856D6', fontWeight: '600' },
+  closedText: { fontSize: 13, color: '#C7C7CC', marginLeft: 4 },
+  // Photos
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoWrap: { width: 90, height: 90, borderRadius: 10, overflow: 'hidden', position: 'relative' },
   photoThumb: { width: '100%', height: '100%', borderRadius: 10 },
   primaryBadge: {
     position: 'absolute', top: 4, left: 4,
     backgroundColor: '#FF9500', borderRadius: 10,
-    width: 18, height: 18, alignItems: 'center', justifyContent: 'center',
+    width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
   },
-  primaryBadgeText: { fontSize: 10, color: '#fff', fontWeight: '800' },
+  primaryBadgeText: { fontSize: 11, color: '#fff', fontWeight: '800' },
   photoActions: {
     position: 'absolute', bottom: 4, right: 4,
     flexDirection: 'row', gap: 4,
@@ -551,5 +1059,4 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   addPhotoText: { fontSize: 11, color: '#8E8E93', fontWeight: '500' },
-  photoHint: { fontSize: 12, color: '#8E8E93', lineHeight: 16 },
 })

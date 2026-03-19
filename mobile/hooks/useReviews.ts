@@ -31,7 +31,6 @@ export function useReviews(placeId: string) {
         `)
         .eq('place_id', placeId)
         .order('created_at', { ascending: false })
-      console.log('[useReviews] data:', JSON.stringify(data), 'error:', JSON.stringify(error))
       if (error) throw error
 
       const reviews = (data ?? []) as unknown as ReviewWithProfile[]

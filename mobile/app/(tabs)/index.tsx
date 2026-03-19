@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
+import * as Location from 'expo-location'
 import { router } from 'expo-router'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Pressable,
@@ -15,8 +17,10 @@ import { Image } from 'expo-image'
 
 import AppBackground from '../../components/AppBackground'
 import { isOpenNow } from '../../utils/isOpenNow'
-import { useWeeklyFeed } from '../../hooks/useWeeklyFeed'
+import { getDistanceKm, NEARBY_RADIUS_KM } from '../../utils/distance'
+import { useTrendingPlaces } from '../../hooks/useTrendingPlaces'
 import { usePlaces } from '../../hooks/usePlaces'
+import { useCategories } from '../../hooks/useCategories'
 import { useZones } from '../../hooks/useZones'
 import { useSession } from '../../hooks/useSession'
 import { supabase } from '../../lib/supabase'
@@ -29,23 +33,63 @@ function photoUrl(storagePath: string) {
   return supabase.storage.from('place-photos').getPublicUrl(storagePath).data.publicUrl
 }
 
+// matchName must equal the category's name_en in the DB
 const CATEGORIES = [
-  { key: 'dining',     labelFr: 'Dining',     labelEn: 'Dining',      icon: 'restaurant-outline' as const, bg: 'rgba(255,149,0,0.1)',   color: '#FF9500' },
-  { key: 'nightlife',  labelFr: 'Nightlife',  labelEn: 'Nightlife',   icon: 'wine-outline'       as const, bg: 'rgba(175,82,222,0.1)',  color: '#AF52DE' },
-  { key: 'activities', labelFr: 'Activités',  labelEn: 'Activities',  icon: 'ticket-outline'     as const, bg: 'rgba(52,199,89,0.1)',   color: '#34C759' },
-] as const
+  { matchName: 'Restaurant', labelFr: 'Restaurants', labelEn: 'Restaurants', icon: 'restaurant-outline' as const, bg: 'rgba(255,149,0,0.1)',   color: '#FF9500' },
+  { matchName: 'Nightlife',  labelFr: 'Nightlife',   labelEn: 'Nightlife',   icon: 'wine-outline'       as const, bg: 'rgba(175,82,222,0.1)',  color: '#AF52DE' },
+  { matchName: 'Activities', labelFr: 'Activités',   labelEn: 'Activities',  icon: 'ticket-outline'     as const, bg: 'rgba(52,199,89,0.1)',   color: '#34C759' },
+]
 
 export default function HomeScreen() {
   const { i18n } = useTranslation()
   const { session } = useSession()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
 
-  const { data: feed, isLoading: feedLoading } = useWeeklyFeed()
+  const { data: trendingPlaces, isLoading: trendingLoading } = useTrendingPlaces()
   const { data: placesData, isLoading: placesLoading } = usePlaces()
+  const { data: categories } = useCategories()
   const { data: zones } = useZones()
 
-  const trendingItems = feed?.entries?.slice(0, 6) ?? []
-  const newPlaces = placesData?.pages?.[0]?.slice(0, 6) ?? []
+  // Nearby section — check location permission silently on mount (no popup)
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined')
+
+  useEffect(() => {
+    Location.getForegroundPermissionsAsync().then(({ status }) => {
+      setLocationPermission(status as any)
+      if (status === 'granted') {
+        Location.getCurrentPositionAsync({}).then(loc => {
+          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
+        }).catch(() => {})
+      }
+    })
+  }, [])
+
+  async function requestLocationForNearby() {
+    const { status } = await Location.requestForegroundPermissionsAsync()
+    setLocationPermission(status as any)
+    if (status === 'granted') {
+      const loc = await Location.getCurrentPositionAsync({})
+      setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
+    }
+  }
+
+  const allPlaces = placesData?.pages?.flat() ?? []
+
+  // Places within NEARBY_RADIUS_KM of the user, sorted by distance ascending
+  const nearbyPlaces = userLocation
+    ? allPlaces
+        .filter((p: any) => p.latitude && p.longitude)
+        .map((p: any) => ({
+          ...p,
+          _distKm: getDistanceKm(userLocation.latitude, userLocation.longitude, p.latitude, p.longitude),
+        }))
+        .filter((p: any) => p._distKm <= NEARBY_RADIUS_KM)
+        .sort((a: any, b: any) => a._distKm - b._distKm)
+        .slice(0, 8)
+    : []
+
+  const newPlaces = allPlaces.slice(0, 6)
 
   return (
     <AppBackground>
@@ -77,28 +121,7 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
 
-          {/* Categories */}
-          <Text style={styles.sectionTitle}>
-            {lang === 'fr' ? 'Catégories' : 'Categories'}
-          </Text>
-          <View style={styles.categoriesGrid}>
-            {CATEGORIES.map((cat) => (
-              <Pressable
-                key={cat.key}
-                style={styles.categoryCard}
-                onPress={() => router.push('/(tabs)/explore')}
-              >
-                <View style={[styles.categoryIconBg, { backgroundColor: cat.bg }]}>
-                  <Ionicons name={cat.icon} size={24} color={cat.color} />
-                </View>
-                <Text style={styles.categoryLabel}>
-                  {lang === 'fr' ? cat.labelFr : cat.labelEn}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Trending Now */}
+          {/* Trending Now — promoted partners first, then top-rated */}
           <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>
               {lang === 'fr' ? 'Tendances' : 'Trending Now'}
@@ -112,25 +135,29 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.hScroll}
           >
-            {feedLoading ? (
+            {trendingLoading ? (
               <View style={[styles.trendingCard, styles.loadingCard]}>
                 <ActivityIndicator color="#007AFF" />
               </View>
-            ) : trendingItems.length === 0 ? (
+            ) : (trendingPlaces ?? []).length === 0 ? (
               <View style={[styles.trendingCard, styles.emptyCard]}>
-                <Ionicons name="compass-outline" size={32} color="rgba(0,0,0,0.2)" />
+                <Ionicons name="trending-up-outline" size={32} color="rgba(0,0,0,0.2)" />
                 <Text style={styles.emptyText}>
                   {lang === 'fr' ? 'Bientôt disponible' : 'Coming soon'}
                 </Text>
               </View>
             ) : (
-              trendingItems.map((item: any) => {
-                const place = item.places ?? item
+              (trendingPlaces ?? []).map((place: any) => {
                 const photo = place.photos?.find((p: any) => p.is_primary) ?? place.photos?.[0]
                 const catName = lang === 'fr' ? place.categories?.name_fr : place.categories?.name_en
+                const promotedLabel = place.is_promoted
+                  ? (lang === 'fr'
+                      ? (place.promoted_label_fr || 'Promu')
+                      : (place.promoted_label_en || 'Promoted'))
+                  : null
                 return (
                   <Pressable
-                    key={item.id}
+                    key={place.id}
                     style={styles.trendingCard}
                     onPress={() => router.push(`/place/${place.id}`)}
                   >
@@ -138,6 +165,12 @@ export default function HomeScreen() {
                       ? <Image source={{ uri: photoUrl(photo.storage_path) }} style={StyleSheet.absoluteFill} contentFit="cover" />
                       : <View style={[StyleSheet.absoluteFill, styles.photoFallback]} />
                     }
+                    {/* Promoted badge — top-right corner on the photo */}
+                    {promotedLabel && (
+                      <View style={styles.promotedBadgePhoto}>
+                        <Text style={styles.promotedBadgePhotoText}>{promotedLabel}</Text>
+                      </View>
+                    )}
                     <View style={styles.trendingOverlay}>
                       <View style={styles.trendingNameRow}>
                         <Text style={[styles.trendingName, { flex: 1 }]} numberOfLines={1}>{place.name}</Text>
@@ -153,15 +186,14 @@ export default function HomeScreen() {
                         })()}
                       </View>
                       <View style={styles.trendingMeta}>
-                        {place.rating && (
+                        {!place.is_promoted && place._avgRating ? (
                           <View style={styles.ratingBadge}>
-                            <Text style={styles.ratingText}>{place.rating}</Text>
+                            <Text style={styles.ratingText}>{place._avgRating.toFixed(1)}</Text>
                             <Ionicons name="star" size={8} color="#fff" />
                           </View>
-                        )}
+                        ) : null}
                         <Text style={styles.trendingMetaText} numberOfLines={1}>
-                          {place.zones?.name ?? ''}
-                          {catName ? ` · ${catName}` : ''}
+                          {place.zones?.name ?? ''}{catName ? ` · ${catName}` : ''}
                         </Text>
                       </View>
                     </View>
@@ -170,6 +202,112 @@ export default function HomeScreen() {
               })
             )}
           </ScrollView>
+
+          {/* Nearby section */}
+          {locationPermission !== 'denied' && (
+            <>
+              <View style={styles.sectionRow}>
+                <Text style={styles.sectionTitle}>
+                  {lang === 'fr' ? 'Près de vous' : 'Near You'}
+                </Text>
+                {nearbyPlaces.length > 0 && (
+                  <Pressable onPress={() => router.push({ pathname: '/(tabs)/explore', params: { nearMe: '1' } })}>
+                    <Text style={styles.seeAll}>{lang === 'fr' ? 'Voir tout' : 'See All'}</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {locationPermission === 'undetermined' || (locationPermission === 'granted' && !userLocation) ? (
+                // Permission not yet asked or location loading
+                <Pressable style={styles.nearbyPrompt} onPress={requestLocationForNearby}>
+                  <View style={styles.nearbyPromptIcon}>
+                    <Ionicons name="location-outline" size={22} color="#E8571A" />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.nearbyPromptTitle}>
+                      {lang === 'fr' ? 'Activer la localisation' : 'Enable location'}
+                    </Text>
+                    <Text style={styles.nearbyPromptSub}>
+                      {lang === 'fr'
+                        ? 'Découvrez les lieux à moins de 3 km de vous'
+                        : 'Discover places within 3 km of you'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+                </Pressable>
+              ) : nearbyPlaces.length === 0 ? (
+                // Location granted but nothing within 3km
+                <View style={styles.nearbyEmpty}>
+                  <Ionicons name="location-outline" size={20} color="rgba(0,0,0,0.2)" />
+                  <Text style={styles.nearbyEmptyText}>
+                    {lang === 'fr'
+                      ? 'Aucun lieu dans un rayon de 3 km'
+                      : 'No places within 3 km'}
+                  </Text>
+                </View>
+              ) : (
+                // Show nearby cards
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.hScroll}
+                >
+                  {nearbyPlaces.map((place: any) => {
+                    const photo = place.photos?.find((p: any) => p.is_primary) ?? place.photos?.[0]
+                    const catName = lang === 'fr' ? place.categories?.name_fr : place.categories?.name_en
+                    const dist = place._distKm < 1
+                      ? `${Math.round(place._distKm * 1000)} m`
+                      : `${place._distKm.toFixed(1)} km`
+                    return (
+                      <Pressable
+                        key={place.id}
+                        style={styles.nearbyCard}
+                        onPress={() => router.push(`/place/${place.id}`)}
+                      >
+                        {photo
+                          ? <Image source={{ uri: photoUrl(photo.storage_path) }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                          : <View style={[StyleSheet.absoluteFill, styles.photoFallback]} />
+                        }
+                        <View style={styles.nearbyOverlay}>
+                          <View style={styles.distBadge}>
+                            <Ionicons name="navigate" size={9} color="#007AFF" />
+                            <Text style={styles.distBadgeText}>{dist}</Text>
+                          </View>
+                          <Text style={styles.nearbyName} numberOfLines={1}>{place.name}</Text>
+                          <Text style={styles.nearbyMeta} numberOfLines={1}>
+                            {place.zones?.name ?? ''}{catName ? ` · ${catName}` : ''}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    )
+                  })}
+                </ScrollView>
+              )}
+            </>
+          )}
+
+          {/* Categories */}
+          <Text style={styles.sectionTitle}>
+            {lang === 'fr' ? 'Catégories' : 'Categories'}
+          </Text>
+          <View style={styles.categoriesGrid}>
+            {CATEGORIES.map((cat) => {
+              const dbCat = categories?.find(c => c.name_en === cat.matchName)
+              return (
+              <Pressable
+                key={cat.matchName}
+                style={styles.categoryCard}
+                onPress={() => router.push({ pathname: '/(tabs)/explore', params: dbCat ? { categoryId: dbCat.id } : {} })}
+              >
+                <View style={[styles.categoryIconBg, { backgroundColor: cat.bg }]}>
+                  <Ionicons name={cat.icon} size={24} color={cat.color} />
+                </View>
+                <Text style={styles.categoryLabel}>
+                  {lang === 'fr' ? cat.labelFr : cat.labelEn}
+                </Text>
+              </Pressable>
+            )})}
+          </View>
 
           {/* Explore by Area */}
           <Text style={[styles.sectionTitle, { marginTop: 8 }]}>
@@ -184,7 +322,7 @@ export default function HomeScreen() {
               <Pressable
                 key={zone.id}
                 style={styles.areaChip}
-                onPress={() => router.push('/(tabs)/explore')}
+                onPress={() => router.push({ pathname: '/(tabs)/explore', params: { zoneId: zone.id } })}
               >
                 <Text style={styles.areaChipText}>{zone.name}</Text>
               </Pressable>
@@ -412,11 +550,87 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  promotedBadgePhoto: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#fff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  promotedBadgePhotoText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FF9500',
+  },
   trendingMetaText: {
     fontSize: 13,
     color: '#555',
     flex: 1,
   },
+  // Nearby section
+  nearbyPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 28,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  nearbyPromptIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: 'rgba(232,87,26,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  nearbyPromptTitle: { fontSize: 14, fontWeight: '600', color: '#1C1C1E' },
+  nearbyPromptSub: { fontSize: 12, color: '#8E8E93' },
+  nearbyEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 20,
+    marginBottom: 28,
+  },
+  nearbyEmptyText: { fontSize: 13, color: 'rgba(0,0,0,0.3)' },
+  nearbyCard: {
+    width: 160,
+    height: 200,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#E5E5EA',
+  },
+  nearbyOverlay: {
+    position: 'absolute',
+    bottom: 8, left: 8, right: 8,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 12,
+    padding: 9,
+    gap: 2,
+  },
+  distBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0,122,255,0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 2,
+  },
+  distBadgeText: { fontSize: 10, fontWeight: '700', color: '#007AFF' },
+  nearbyName: { fontSize: 13, fontWeight: '700', color: '#000' },
+  nearbyMeta: { fontSize: 11, color: '#555' },
   // Area chips
   areaChip: {
     paddingHorizontal: 20,

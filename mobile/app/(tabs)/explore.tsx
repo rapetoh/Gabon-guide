@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import AppBackground from '../../components/AppBackground'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -22,18 +22,7 @@ import { usePlaces, PlaceFilters } from '../../hooks/usePlaces'
 import { useZones } from '../../hooks/useZones'
 import { supabase } from '../../lib/supabase'
 import { isOpenNow } from '../../utils/isOpenNow'
-
-function getDistanceKm(
-  lat1: number, lon1: number,
-  lat2: number, lon2: number
-): number {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = Math.sin(dLat/2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+import { getDistanceKm } from '../../utils/distance'
 
 function photoUrl(path: string) {
   return supabase.storage.from('place-photos').getPublicUrl(path).data.publicUrl
@@ -49,6 +38,12 @@ export default function ExploreScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
 
+  // Params passed from Home screen when tapping a category or zone shortcut
+  const { categoryId: paramCategoryId, zoneId: paramZoneId } = useLocalSearchParams<{
+    categoryId?: string
+    zoneId?: string
+  }>()
+
   const [search, setSearch]           = useState('')
   const [filters, setFilters]         = useState<PlaceFilters>({})
   const [activePrice, setActivePrice] = useState<1|2|3|null>(null)
@@ -59,6 +54,12 @@ export default function ExploreScreen() {
 
   const { data: categories } = useCategories()
   const { data: zones }      = useZones()
+
+  // Apply filters passed from Home screen shortcuts
+  useEffect(() => {
+    if (paramCategoryId) setFilters(f => ({ ...f, categoryId: paramCategoryId }))
+    if (paramZoneId)     setFilters(f => ({ ...f, zoneId: paramZoneId }))
+  }, [paramCategoryId, paramZoneId])
   const {
     data,
     isLoading,

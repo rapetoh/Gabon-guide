@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -30,20 +31,48 @@ function useAdminPlaces() {
         .from('places')
         .select('id, name, is_active, categories(name_fr, name_en), zones(name)')
         .eq('is_deleted', false)
-        .order('created_at', { ascending: false })
+        .order('name', { ascending: true })
       if (error) throw error
       return (data ?? []) as unknown as AdminPlace[]
     },
   })
 }
 
+type Filter = 'all' | 'active' | 'inactive'
+
+type ListItem =
+  | { type: 'place'; data: AdminPlace }
+  | { type: 'separator'; label: string }
+
 export default function AdminDashboardScreen() {
   const { i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const { data: places, isLoading } = useAdminPlaces()
+  const [filter, setFilter] = useState<Filter>('all')
 
-  const active = places?.filter(p => p.is_active).length ?? 0
+  const active = places?.filter(p => p.is_active) ?? []
+  const inactive = places?.filter(p => !p.is_active) ?? []
   const total = places?.length ?? 0
+
+  // Build the list depending on active filter
+  function buildList(): ListItem[] {
+    if (filter === 'active') return active.map(p => ({ type: 'place', data: p }))
+    if (filter === 'inactive') return inactive.map(p => ({ type: 'place', data: p }))
+    // 'all': active first, then a separator, then inactive
+    const items: ListItem[] = active.map(p => ({ type: 'place', data: p }))
+    if (active.length > 0 && inactive.length > 0) {
+      items.push({
+        type: 'separator',
+        label: lang === 'fr'
+          ? `${inactive.length} inactif${inactive.length > 1 ? 's' : ''}`
+          : `${inactive.length} inactive`,
+      })
+    }
+    inactive.forEach(p => items.push({ type: 'place', data: p }))
+    return items
+  }
+
+  const listData = buildList()
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -58,20 +87,35 @@ export default function AdminDashboardScreen() {
         </Pressable>
       </View>
 
-      {/* Stats row */}
+      {/* Stats row — tapping each card filters the list */}
       <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{total}</Text>
-          <Text style={styles.statLabel}>{lang === 'fr' ? 'Lieux' : 'Places'}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statNumber, { color: '#34C759' }]}>{active}</Text>
+        <Pressable
+          style={[styles.statCard, filter === 'all' && styles.statCardActive]}
+          onPress={() => setFilter('all')}
+        >
+          <Text style={[styles.statNumber, filter === 'all' && styles.statNumberSelected]}>
+            {total}
+          </Text>
+          <Text style={styles.statLabel}>{lang === 'fr' ? 'Tous' : 'All'}</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.statCard, filter === 'active' && styles.statCardActive]}
+          onPress={() => setFilter('active')}
+        >
+          <Text style={[styles.statNumber, { color: '#34C759' }]}>
+            {active.length}
+          </Text>
           <Text style={styles.statLabel}>{lang === 'fr' ? 'Actifs' : 'Active'}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statNumber, { color: '#FF9500' }]}>{total - active}</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.statCard, filter === 'inactive' && styles.statCardActive]}
+          onPress={() => setFilter('inactive')}
+        >
+          <Text style={[styles.statNumber, { color: '#FF9500' }]}>
+            {inactive.length}
+          </Text>
           <Text style={styles.statLabel}>{lang === 'fr' ? 'Inactifs' : 'Inactive'}</Text>
-        </View>
+        </Pressable>
       </View>
 
       {/* List */}
@@ -79,35 +123,59 @@ export default function AdminDashboardScreen() {
         <View style={styles.center}>
           <ActivityIndicator color="#E8571A" />
         </View>
+      ) : listData.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>
+            {filter === 'active'
+              ? (lang === 'fr' ? 'Aucun lieu actif' : 'No active places')
+              : filter === 'inactive'
+              ? (lang === 'fr' ? 'Aucun lieu inactif' : 'No inactive places')
+              : (lang === 'fr' ? 'Aucun lieu' : 'No places yet')}
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={places}
-          keyExtractor={item => item.id}
+          data={listData}
+          keyExtractor={(item, idx) =>
+            item.type === 'separator' ? `sep-${idx}` : item.data.id
+          }
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <Pressable
-              style={styles.row}
-              onPress={() => router.push(`/admin/place/${item.id}`)}
-            >
-              <View style={[styles.statusDot, item.is_active ? styles.dotActive : styles.dotInactive]} />
-              <View style={styles.rowBody}>
-                <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.rowSub} numberOfLines={1}>
-                  {lang === 'fr' ? item.categories?.name_fr : item.categories?.name_en}
-                  {item.zones ? ` · ${item.zones.name}` : ''}
-                </Text>
-              </View>
-              <View style={[styles.statusBadge, item.is_active ? styles.badgeActive : styles.badgeInactive]}>
-                <Text style={[styles.statusBadgeText, item.is_active ? styles.badgeActiveText : styles.badgeInactiveText]}>
-                  {item.is_active
-                    ? (lang === 'fr' ? 'Actif' : 'Active')
-                    : (lang === 'fr' ? 'Inactif' : 'Inactive')}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
-            </Pressable>
-          )}
+          renderItem={({ item }) => {
+            if (item.type === 'separator') {
+              return (
+                <View style={styles.separator}>
+                  <View style={styles.separatorLine} />
+                  <Text style={styles.separatorLabel}>{item.label}</Text>
+                  <View style={styles.separatorLine} />
+                </View>
+              )
+            }
+            const place = item.data
+            return (
+              <Pressable
+                style={styles.row}
+                onPress={() => router.push(`/admin/place/${place.id}`)}
+              >
+                <View style={[styles.statusDot, place.is_active ? styles.dotActive : styles.dotInactive]} />
+                <View style={styles.rowBody}>
+                  <Text style={styles.rowName} numberOfLines={1}>{place.name}</Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>
+                    {lang === 'fr' ? place.categories?.name_fr : place.categories?.name_en}
+                    {place.zones ? ` · ${place.zones.name}` : ''}
+                  </Text>
+                </View>
+                <View style={[styles.statusBadge, place.is_active ? styles.badgeActive : styles.badgeInactive]}>
+                  <Text style={[styles.statusBadgeText, place.is_active ? styles.badgeActiveText : styles.badgeInactiveText]}>
+                    {place.is_active
+                      ? (lang === 'fr' ? 'Actif' : 'Active')
+                      : (lang === 'fr' ? 'Inactif' : 'Inactive')}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              </Pressable>
+            )
+          }}
         />
       )}
     </SafeAreaView>
@@ -147,10 +215,17 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: 'center',
     gap: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  statCardActive: {
+    borderColor: '#E8571A',
   },
   statNumber: { fontSize: 24, fontWeight: '800', color: '#1C1C1E' },
+  statNumberSelected: { color: '#E8571A' },
   statLabel: { fontSize: 12, color: '#8E8E93', fontWeight: '500' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { fontSize: 15, color: '#8E8E93' },
   list: { paddingHorizontal: 16, gap: 8, paddingBottom: 40 },
   row: {
     flexDirection: 'row',
@@ -175,4 +250,12 @@ const styles = StyleSheet.create({
   statusBadgeText: { fontSize: 11, fontWeight: '600' },
   badgeActiveText: { color: '#34C759' },
   badgeInactiveText: { color: '#8E8E93' },
+  separator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginVertical: 4,
+  },
+  separatorLine: { flex: 1, height: 1, backgroundColor: '#E5E5EA' },
+  separatorLabel: { fontSize: 12, color: '#8E8E93', fontWeight: '600' },
 })
