@@ -25,6 +25,7 @@ import { usePlace } from '../../hooks/usePlace'
 import { useFavorites } from '../../hooks/useFavorites'
 import { useReviews, useUserReview, useSubmitReview, useDeleteReview } from '../../hooks/useReviews'
 import { useSession } from '../../hooks/useSession'
+import { useAnalytics } from '../../hooks/useAnalytics'
 import { supabase } from '../../lib/supabase'
 import { getWhatsAppUrl } from '../../utils/formatWhatsApp'
 import { isOpenNow } from '../../utils/isOpenNow'
@@ -61,11 +62,12 @@ const DAY_LABELS: Record<string, { fr: string; en: string }> = {
 
 export default function PlaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const insets = useSafeAreaInsets()
 
   const { session } = useSession()
+  const analytics = useAnalytics()
   const { data: place, isLoading } = usePlace(id)
   const { isFavorite, toggleFavorite } = useFavorites()
   const { data: reviewsData } = useReviews(id)
@@ -86,6 +88,13 @@ export default function PlaceDetailScreen() {
   const [isNavigating, setIsNavigating] = useState(false)
   const locationWatchRef = useRef<Location.LocationSubscription | null>(null)
   const mapRef = useRef<MapView>(null)
+
+  // Track place_viewed once the place data is loaded
+  useEffect(() => {
+    if (place) {
+      analytics.placeViewed(place.id, place.name, (place as any).categories?.name_en)
+    }
+  }, [place?.id])
 
   // Clean up location watcher when map closes
   useEffect(() => {
@@ -109,7 +118,7 @@ export default function PlaceDetailScreen() {
   if (!place) {
     return (
       <View style={styles.loadingScreen}>
-        <Text style={{ color: '#8E8E93' }}>Lieu introuvable</Text>
+        <Text style={{ color: '#8E8E93' }}>{t('place.notFound')}</Text>
       </View>
     )
   }
@@ -132,11 +141,15 @@ export default function PlaceDetailScreen() {
 
   function handleWhatsApp() {
     const url = getWhatsAppUrl(p.whatsapp)
-    if (url) Linking.openURL(url)
+    if (url) {
+      analytics.ctaWhatsappTapped(p.id, p.name)
+      Linking.openURL(url)
+    }
   }
 
   function handleCall() {
     if (!p.phone) return
+    analytics.ctaCallTapped(p.id, p.name)
     Linking.openURL(`tel:${formatPhone(p.phone)}`)
   }
 
@@ -299,6 +312,7 @@ export default function PlaceDetailScreen() {
       router.push('/auth/login')
       return
     }
+    analytics.ctaSaveTapped(p.id, p.name, !saved)
     toggleFavorite.mutate(p.id)
   }
 

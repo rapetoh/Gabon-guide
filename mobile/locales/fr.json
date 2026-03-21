@@ -7,7 +7,10 @@
   },
   "home": {
     "weekendTitle": "Week-end à Libreville",
-    "seeAll": "Voir tout"
+    "seeAll": "Voir tout",
+    "trending": "Tendances",
+    "nearYou": "Près de vous",
+    "newInTown": "Nouveautés"
   },
   "explore": {
     "searchPlaceholder": "Rechercher un lieu...",
@@ -50,6 +53,7 @@
       "sat": "Samedi",
       "sun": "Dimanche"
     },
+    "notFound": "Lieu introuvable",
     "closedDay": "Fermé",
     "reviews": {
       "title": "Avis",
@@ -89,6 +93,13 @@
     "generic": "Une erreur est survenue. Veuillez réessayer.",
     "offline": "Pas de connexion internet",
     "offlineHint": "Vérifiez votre connexion et réessayez"
+  },
+  "map": {
+    "title": "Carte",
+    "placesCount": "{{count}} lieux"
+  },
+  "app": {
+    "tagline": "Libreville dans ta poche"
   },
   "settings": {
     "title": "Paramètres",

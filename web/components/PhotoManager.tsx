@@ -28,8 +28,13 @@ export default function PhotoManager({
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -50,7 +55,7 @@ export default function PhotoManager({
         .upload(storagePath, file, { contentType: file.type })
 
       if (uploadError) {
-        setError(`Upload failed: ${uploadError.message}`)
+        showToast(`Upload failed: ${uploadError.message}`, 'error')
         continue
       }
 
@@ -69,7 +74,7 @@ export default function PhotoManager({
         .single()
 
       if (dbError) {
-        setError(`DB error: ${dbError.message}`)
+        showToast(`DB error: ${dbError.message}`, 'error')
       } else if (newPhoto) {
         setPhotos(prev => [...prev, newPhoto as Photo])
       }
@@ -77,14 +82,15 @@ export default function PhotoManager({
 
     setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
+    showToast(`${files.length} photo${files.length !== 1 ? 's' : ''} uploaded successfully.`)
   }
 
   async function handleSetPrimary(photoId: string) {
-    // Unset all, then set selected
     await supabase.from('photos').update({ is_primary: false }).eq('place_id', placeId)
     const { error } = await supabase.from('photos').update({ is_primary: true }).eq('id', photoId)
-    if (error) { setError(error.message); return }
+    if (error) { showToast(error.message, 'error'); return }
     setPhotos(prev => prev.map(p => ({ ...p, is_primary: p.id === photoId })))
+    showToast('Primary photo updated.')
   }
 
   async function handleDelete(photo: Photo) {
@@ -96,7 +102,7 @@ export default function PhotoManager({
       .update({ is_deleted: true })
       .eq('id', photo.id)
 
-    if (dbError) { setError(dbError.message); return }
+    if (dbError) { showToast(dbError.message, 'error'); return }
 
     // Delete from storage
     await supabase.storage.from('place-photos').remove([photo.storage_path])
@@ -106,9 +112,13 @@ export default function PhotoManager({
 
   return (
     <div className="max-w-3xl">
-      {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
-          {error}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 text-white text-sm font-medium rounded-xl shadow-lg ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+          {toast.type === 'success'
+            ? <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            : <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          }
+          {toast.message}
         </div>
       )}
 

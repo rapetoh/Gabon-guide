@@ -114,6 +114,7 @@ export default function PlaceForm({ place }: Props) {
   const [zones, setZones] = useState<{ id: string; name: string }[]>([])
 
   const [saving, setSaving] = useState(false)
+  const [linkResolving, setLinkResolving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
 
@@ -137,8 +138,29 @@ export default function PlaceForm({ place }: Props) {
     setHours(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }))
   }
 
-  function applyLocationLink() {
-    const result = parseLocationLink(locationLink.trim())
+  async function applyLocationLink() {
+    const raw = locationLink.trim()
+    // Try direct parse first (works for full Google Maps / Apple Maps URLs)
+    let result = parseLocationLink(raw)
+
+    // If that fails, resolve redirects server-side — handles maps.app.goo.gl short links
+    if (!result) {
+      setLinkResolving(true)
+      try {
+        const res = await fetch('/api/resolve-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: raw }),
+        })
+        const data = await res.json()
+        if (data.resolvedUrl) result = parseLocationLink(data.resolvedUrl)
+      } catch {
+        // network error — fall through to show error
+      } finally {
+        setLinkResolving(false)
+      }
+    }
+
     if (!result) {
       setErrors(e => ({ ...e, locationLink: 'Link not recognized. Try a Google Maps or Apple Maps link.' }))
       return
@@ -235,7 +257,8 @@ export default function PlaceForm({ place }: Props) {
         .from('places').insert(payload).select('id').single()
       saveError = insertError
       if (!saveError && newPlace) {
-        router.push(`/admin/places/${(newPlace as any).id}`)
+        // Redirect to photos page so admin can add photos immediately after creating a place
+        router.push(`/admin/places/${(newPlace as any).id}/photos?created=1`)
         return
       }
     }
@@ -262,14 +285,17 @@ export default function PlaceForm({ place }: Props) {
 
   return (
     <div className="max-w-3xl space-y-6">
-      {errors._save && (
-        <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
-          {errors._save}
+      {/* Fixed-position toasts — visible regardless of scroll position */}
+      {success && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-green-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in slide-in-from-bottom-2">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+          Place saved successfully.
         </div>
       )}
-      {success && (
-        <div className="px-4 py-3 bg-green-50 border border-green-100 rounded-lg text-sm text-green-700">
-          Saved successfully.
+      {errors._save && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-red-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in slide-in-from-bottom-2">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          {errors._save}
         </div>
       )}
 
@@ -407,10 +433,10 @@ export default function PlaceForm({ place }: Props) {
             <button
               type="button"
               onClick={applyLocationLink}
-              disabled={!locationLink.trim()}
+              disabled={!locationLink.trim() || linkResolving}
               className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-gray-700 text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
             >
-              Extract coords
+              {linkResolving ? 'Resolving…' : 'Extract coords'}
             </button>
           </div>
           {err('locationLink')}
@@ -586,6 +612,36 @@ export default function PlaceForm({ place }: Props) {
         </label>
       </Section>
 
+      {/* Photos */}
+      <Section title="Photos">
+        {place?.id ? (
+          <a
+            href={`/admin/places/${place.id}/photos`}
+            className="flex items-center justify-between p-4 border-2 border-dashed border-orange-200 rounded-xl hover:border-orange-400 hover:bg-orange-50 transition-colors group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+                <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Manage photos</p>
+                <p className="text-xs text-gray-400">Upload, reorder, and set the primary photo</p>
+              </div>
+            </div>
+            <svg className="w-5 h-5 text-gray-400 group-hover:text-orange-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+          </a>
+        ) : (
+          <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+            <svg className="w-5 h-5 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+            </svg>
+            <p className="text-sm text-gray-400">Save the place first — you'll be taken to the photos page immediately after.</p>
+          </div>
+        )}
+      </Section>
+
       {/* Actions */}
       <div className="flex items-center justify-between pt-2">
         <div>
@@ -598,23 +654,13 @@ export default function PlaceForm({ place }: Props) {
             </button>
           )}
         </div>
-        <div className="flex gap-3">
-          {place?.id && (
-            <a
-              href={`/admin/places/${place.id}/photos`}
-              className="px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:border-gray-300 transition-colors"
-            >
-              Manage photos
-            </a>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            {saving ? 'Saving…' : place?.id ? 'Save changes' : 'Create place'}
-          </button>
-        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          {saving ? 'Saving…' : place?.id ? 'Save changes' : 'Create place'}
+        </button>
       </div>
     </div>
   )

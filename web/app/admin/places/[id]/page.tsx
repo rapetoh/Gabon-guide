@@ -6,13 +6,14 @@ import type { Database } from '../../../../lib/database.types'
 
 type Place = Database['public']['Tables']['places']['Row']
 
-export default async function EditPlacePage({ params }: { params: { id: string } }) {
+export default async function EditPlacePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const supabase = await createClient()
 
   const { data } = await supabase
     .from('places')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('is_deleted', false)
     .single()
 
@@ -28,7 +29,7 @@ export default async function EditPlacePage({ params }: { params: { id: string }
         <span className="text-gray-200">/</span>
         <h1 className="text-xl font-bold text-gray-900">{place.name}</h1>
         <Link
-          href={`/admin/places/${place.id}/photos`}
+          href={`/admin/places/${id}/photos`}
           className="ml-auto text-sm text-orange-500 hover:text-orange-700 font-medium"
         >
           Photos →

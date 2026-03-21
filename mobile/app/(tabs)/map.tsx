@@ -30,7 +30,7 @@ function photoUrl(path: string) {
 }
 
 export default function MapScreen() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView>(null)
@@ -117,8 +117,8 @@ export default function MapScreen() {
       {/* Top bar */}
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <View style={styles.topTitle}>
-          <Text style={styles.topTitleText}>{lang === 'fr' ? 'Carte' : 'Map'}</Text>
-          <Text style={styles.topCount}>{mappable.length} lieux</Text>
+          <Text style={styles.topTitleText}>{t('map.title')}</Text>
+          <Text style={styles.topCount}>{t('map.placesCount', { count: mappable.length })}</Text>
         </View>
       </View>
 

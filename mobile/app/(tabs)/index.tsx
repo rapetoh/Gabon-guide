@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -114,12 +116,42 @@ export default function HomeScreen() {
           </View>
 
           {/* Search */}
-          <Pressable style={styles.searchBar} onPress={() => router.push('/(tabs)/explore')}>
-            <Ionicons name="search-outline" size={20} color="#666" />
-            <Text style={styles.searchPlaceholder}>
-              {lang === 'fr' ? 'Restaurants, bars, activités...' : 'Restaurants, bars, activities...'}
-            </Text>
-          </Pressable>
+          <View style={styles.searchBar}>
+            <Pressable
+              style={styles.searchTapArea}
+              onPress={() => router.push('/(tabs)/explore')}
+            >
+              <Ionicons name="search-outline" size={20} color="#666" />
+              <Text style={styles.searchPlaceholder}>
+                {lang === 'fr' ? 'Restaurants, bars, activités...' : 'Restaurants, bars, activities...'}
+              </Text>
+            </Pressable>
+
+            <View style={styles.searchDivider} />
+
+            <Pressable
+              style={styles.aiPill}
+              onPress={() =>
+                Alert.alert(
+                  lang === 'fr' ? 'Assistant O\'Kili ✨' : 'O\'Kili Assistant ✨',
+                  lang === 'fr'
+                    ? 'Bientôt disponible — dites à l\'IA ce que vous cherchez et elle trouvera le bon endroit pour vous.'
+                    : 'Coming soon — tell the AI what you\'re looking for and it will find the perfect spot.',
+                  [{ text: 'OK' }]
+                )
+              }
+            >
+              <LinearGradient
+                colors={['#FF8C42', '#E8571A']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.aiPillGradient}
+              >
+                <Ionicons name="sparkles" size={13} color="#fff" />
+                <Text style={styles.aiPillText}>AI</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
 
           {/* Trending Now — promoted partners first, then top-rated */}
           <View style={styles.sectionRow}>
@@ -382,6 +414,7 @@ export default function HomeScreen() {
           <View style={{ height: 110 }} />
         </ScrollView>
       </SafeAreaView>
+
     </AppBackground>
   )
 }
@@ -425,7 +458,6 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginHorizontal: 20,
     marginBottom: 32,
     height: 52,
@@ -433,11 +465,47 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.65)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.4)',
-    paddingHorizontal: 16,
+    paddingLeft: 16,
+    paddingRight: 6,
     shadowColor: 'rgba(31,38,135,0.07)',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 1,
     shadowRadius: 32,
+  },
+  searchTapArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  searchDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    marginHorizontal: 8,
+  },
+  aiPill: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#E8571A',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  aiPillGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  aiPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
   searchPlaceholder: {
     fontSize: 16,

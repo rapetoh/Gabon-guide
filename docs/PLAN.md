@@ -447,6 +447,7 @@ formatWhatsAppNumber(input) — test cases:
 **Note:** Next.js 16 breaking changes encountered and fixed:
 - `middleware.ts` → renamed to `proxy.ts`, export named `proxy` (not `middleware`)
 - `searchParams` in server components is a Promise → must be `await`ed
+- `params` in dynamic route server components is also a Promise → must `await params` before accessing `.id` or any segment
 - `useSearchParams` in client components requires `<Suspense>` boundary
 
 ### 4.2 Dashboard Pages ✅
@@ -484,24 +485,24 @@ All fields + full validation parity with mobile PlaceForm:
 
 ---
 
-### Phase 4 — QA Gate (run before starting Phase 5)
+### Phase 4 — QA Gate ✅ PASSED — March 2026
 
 **Auth**
-- [ ] Visit `/admin` without being logged in → redirected to `/login`
-- [ ] Log in with a non-admin account → still blocked from `/admin`
-- [ ] Log in with admin account → `/admin` dashboard loads
+- [x] Visit `/admin` without being logged in → redirected to `/login`
+- [ ] Log in with a non-admin account → still blocked from `/admin` *(not tested — only one account)*
+- [x] Log in with admin account → `/admin` dashboard loads
 
 **Listings management**
-- [ ] Create a new listing from the web dashboard → appears in mobile app Explore screen
-- [ ] Edit a listing from the web dashboard → changes appear in mobile app immediately
-- [ ] Unpublish a listing → disappears from mobile app Explore screen
-- [ ] Republish it → reappears in mobile app
-- [ ] Delete a listing → gone from both web dashboard and mobile app
+- [x] Create a new listing from the web dashboard → appears in mobile app Explore screen
+- [x] Edit a listing from the web dashboard → changes appear in mobile app immediately
+- [x] Unpublish a listing → disappears from mobile app Explore screen
+- [x] Republish it → reappears in mobile app
+- [ ] Delete a listing → gone from both web dashboard and mobile app *(not tested)*
 
 **Photo management**
-- [ ] Upload a photo for a listing → appears in mobile app detail page
-- [ ] Set a different photo as primary → mobile app detail page shows new primary photo
-- [ ] Delete a photo → gone from mobile app
+- [x] Upload a photo for a listing → appears in mobile app detail page
+- [x] Set a different photo as primary → mobile app detail page shows new primary photo
+- [x] Delete a photo → gone from mobile app
 
 ---
 

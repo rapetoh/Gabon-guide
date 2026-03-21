@@ -143,7 +143,7 @@ export default function LoginScreen() {
         {/* Brand header */}
         <View style={styles.header}>
           <Text style={styles.brand}>O'Kili</Text>
-          <Text style={styles.tagline}>Libreville dans ta poche</Text>
+          <Text style={styles.tagline}>{t('app.tagline')}</Text>
         </View>
 
         {/* Mode toggle */}

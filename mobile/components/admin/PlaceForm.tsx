@@ -168,8 +168,25 @@ export function PlaceForm({ mode, placeId }: Props) {
     return null
   }
 
-  function applyLocationLink() {
-    const result = parseLocationLink(locationLink.trim())
+  async function applyLocationLink() {
+    const raw = locationLink.trim()
+    // Try direct parse first (works for full Google Maps / Apple Maps URLs)
+    let result = parseLocationLink(raw)
+
+    // If that fails, follow redirects — handles maps.app.goo.gl and other short links
+    if (!result) {
+      setLocLoading(true)
+      try {
+        const response = await fetch(raw, { method: 'GET' })
+        // response.url is the final URL after all redirects
+        result = parseLocationLink(response.url)
+      } catch {
+        // network error — fall through to show error message
+      } finally {
+        setLocLoading(false)
+      }
+    }
+
     if (!result) {
       setErrors(e => ({
         ...e,
@@ -438,7 +455,13 @@ export function PlaceForm({ mode, placeId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['trendingPlaces'] })
       if (placeId) queryClient.invalidateQueries({ queryKey: ['place', placeId] })
 
-      router.back()
+      Alert.alert(
+        lang === 'fr' ? 'Enregistré ✓' : 'Saved ✓',
+        lang === 'fr'
+          ? (mode === 'create' ? 'Le lieu a été créé avec succès.' : 'Les modifications ont été enregistrées.')
+          : (mode === 'create' ? 'Place created successfully.' : 'Changes saved successfully.'),
+        [{ text: 'OK', onPress: () => router.back() }]
+      )
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Something went wrong')
     } finally {

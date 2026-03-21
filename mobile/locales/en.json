@@ -7,7 +7,10 @@
   },
   "home": {
     "weekendTitle": "Weekend in Libreville",
-    "seeAll": "See all"
+    "seeAll": "See all",
+    "trending": "Trending Now",
+    "nearYou": "Near You",
+    "newInTown": "New in Town"
   },
   "explore": {
     "searchPlaceholder": "Search a place...",
@@ -50,6 +53,7 @@
       "sat": "Saturday",
       "sun": "Sunday"
     },
+    "notFound": "Place not found",
     "closedDay": "Closed",
     "reviews": {
       "title": "Reviews",
@@ -89,6 +93,13 @@
     "generic": "Something went wrong. Please try again.",
     "offline": "No internet connection",
     "offlineHint": "Check your connection and try again"
+  },
+  "map": {
+    "title": "Map",
+    "placesCount": "{{count}} places"
+  },
+  "app": {
+    "tagline": "Libreville in your pocket"
   },
   "settings": {
     "title": "Settings",

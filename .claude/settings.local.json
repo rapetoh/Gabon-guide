@@ -11,7 +11,8 @@
       "Bash(cp \"c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/admin/place/PlaceForm.tsx\" \"c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/components/admin/PlaceForm.tsx\")",
       "Bash(rm \"c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/admin/place/PlaceForm.tsx\")",
       "Bash(find 'c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/supabase' -name *.sql)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(npx expo:*)"
     ]
   }
 }

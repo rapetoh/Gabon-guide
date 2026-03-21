@@ -20,6 +20,7 @@ import { Image } from 'expo-image'
 import { useCategories } from '../../hooks/useCategories'
 import { usePlaces, PlaceFilters } from '../../hooks/usePlaces'
 import { useZones } from '../../hooks/useZones'
+import { useAnalytics } from '../../hooks/useAnalytics'
 import { supabase } from '../../lib/supabase'
 import { isOpenNow } from '../../utils/isOpenNow'
 import { getDistanceKm } from '../../utils/distance'
@@ -43,6 +44,8 @@ export default function ExploreScreen() {
     categoryId?: string
     zoneId?: string
   }>()
+
+  const analytics = useAnalytics()
 
   const [search, setSearch]           = useState('')
   const [filters, setFilters]         = useState<PlaceFilters>({})
@@ -85,23 +88,29 @@ export default function ExploreScreen() {
     .map(({ place, dist }) => ({ ...place, _distKm: dist }))
 
   function toggleCategory(id: string) {
-    setFilters(f => ({ ...f, categoryId: f.categoryId === id ? undefined : id }))
+    const next = filters.categoryId === id ? undefined : id
+    setFilters(f => ({ ...f, categoryId: next }))
+    analytics.filterUsed({ category: next, zone: filters.zoneId, price: activePrice ?? undefined, openNow, nearMe })
   }
 
   function toggleZone(id: string) {
-    setFilters(f => ({ ...f, zoneId: f.zoneId === id ? undefined : id }))
+    const next = filters.zoneId === id ? undefined : id
+    setFilters(f => ({ ...f, zoneId: next }))
+    analytics.filterUsed({ category: filters.categoryId, zone: next, price: activePrice ?? undefined, openNow, nearMe })
   }
 
   function togglePrice(p: 1|2|3) {
     const next = activePrice === p ? null : p
     setActivePrice(next)
     setFilters(f => ({ ...f, priceRange: next ?? undefined }))
+    analytics.filterUsed({ category: filters.categoryId, zone: filters.zoneId, price: next ?? undefined, openNow, nearMe })
   }
 
   async function toggleNearMe() {
     if (nearMe) {
       setNearMe(false)
       setUserLocation(null)
+      analytics.filterUsed({ category: filters.categoryId, zone: filters.zoneId, price: activePrice ?? undefined, openNow, nearMe: false })
       return
     }
     setLocationLoading(true)
@@ -111,6 +120,7 @@ export default function ExploreScreen() {
       const loc = await Location.getCurrentPositionAsync({})
       setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
       setNearMe(true)
+      analytics.filterUsed({ category: filters.categoryId, zone: filters.zoneId, price: activePrice ?? undefined, openNow, nearMe: true })
     } finally {
       setLocationLoading(false)
     }

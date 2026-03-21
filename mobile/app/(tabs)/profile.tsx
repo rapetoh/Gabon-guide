@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import AppBackground from '../../components/AppBackground'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -6,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native'
@@ -13,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { useSession } from '../../hooks/useSession'
+import { useProfile } from '../../hooks/useProfile'
 import { supabase } from '../../lib/supabase'
 
 export default function ProfileScreen() {
@@ -20,9 +23,9 @@ export default function ProfileScreen() {
   const { session } = useSession()
   const { theme, setTheme } = useTheme()
   const { isAdmin } = useIsAdmin()
+  const { displayName, avatarUrl } = useProfile()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
 
-  const toggleLanguage = () => i18n.changeLanguage(lang === 'fr' ? 'en' : 'fr')
   const handleLogout = () => supabase.auth.signOut()
 
   return (
@@ -31,22 +34,24 @@ export default function ProfileScreen() {
         <Text style={styles.title}>{lang === 'fr' ? 'Profil' : 'Profile'}</Text>
 
         {session ? (
-          <>
-            {/* Avatar + email */}
-            <View style={styles.profileCard}>
+          <View style={styles.profileCard}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImg} contentFit="cover" />
+            ) : (
               <View style={styles.avatar}>
-                <Ionicons name="person" size={32} color="#6B7280" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.email} numberOfLines={1}>{session.user.email}</Text>
-                <Text style={styles.memberSince}>
-                  {lang === 'fr' ? 'Membre O\'Kili' : 'O\'Kili member'}
+                <Text style={styles.avatarInitial}>
+                  {displayName.charAt(0).toUpperCase()}
                 </Text>
               </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.displayName} numberOfLines={1}>{displayName}</Text>
+              <Text style={styles.memberSince}>
+                {lang === 'fr' ? 'Membre O\'Kili' : 'O\'Kili member'}
+              </Text>
             </View>
-          </>
+          </View>
         ) : (
-          /* Not logged in */
           <View style={styles.authCard}>
             <View style={styles.authIcon}>
               <Ionicons name="person-outline" size={36} color="#E8571A" />
@@ -71,42 +76,49 @@ export default function ProfileScreen() {
             {lang === 'fr' ? 'Préférences' : 'Preferences'}
           </Text>
 
-          <Pressable style={styles.row} onPress={toggleLanguage}>
+          {/* Language toggle */}
+          <View style={styles.row}>
             <View style={[styles.rowIcon, { backgroundColor: 'rgba(0,122,255,0.1)' }]}>
               <Ionicons name="globe-outline" size={18} color="#007AFF" />
             </View>
             <Text style={styles.rowLabel}>{t('settings.language')}</Text>
-            <Text style={styles.rowValue}>
-              {lang === 'fr' ? '🇫🇷 Français' : '🇬🇧 English'}
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
-          </Pressable>
+            <View style={styles.segmentWrap}>
+              <Pressable
+                style={[styles.seg, lang === 'fr' && styles.segActive]}
+                onPress={() => i18n.changeLanguage('fr')}
+              >
+                <Text style={[styles.segText, lang === 'fr' && styles.segTextActive]}>FR</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.seg, lang === 'en' && styles.segActive]}
+                onPress={() => i18n.changeLanguage('en')}
+              >
+                <Text style={[styles.segText, lang === 'en' && styles.segTextActive]}>EN</Text>
+              </Pressable>
+            </View>
+          </View>
 
-          <Pressable
-            style={styles.row}
-            onPress={() => setTheme(theme === 'clean' ? 'vibrant' : 'clean')}
-          >
+          {/* Theme toggle */}
+          <View style={styles.row}>
             <View style={[styles.rowIcon, { backgroundColor: 'rgba(175,82,222,0.1)' }]}>
               <Ionicons name="color-palette-outline" size={18} color="#AF52DE" />
             </View>
-            <Text style={styles.rowLabel}>
-              {lang === 'fr' ? 'Thème' : 'Theme'}
-            </Text>
-            <Text style={styles.rowValue}>
-              {theme === 'clean'
-                ? (lang === 'fr' ? '🌤 Épuré' : '🌤 Clean')
-                : (lang === 'fr' ? '🌈 Vibrant' : '🌈 Vibrant')}
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
-          </Pressable>
-
-          <View style={styles.row}>
-            <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
-              <Ionicons name="information-circle-outline" size={18} color="#E8571A" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowLabel}>{lang === 'fr' ? 'Thème vibrant' : 'Vibrant theme'}</Text>
+              <Text style={styles.rowSub}>
+                {theme === 'vibrant'
+                  ? (lang === 'fr' ? 'Activé' : 'On')
+                  : (lang === 'fr' ? 'Désactivé' : 'Off')}
+              </Text>
             </View>
-            <Text style={styles.rowLabel}>{t('settings.about')}</Text>
-            <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+            <Switch
+              value={theme === 'vibrant'}
+              onValueChange={v => setTheme(v ? 'vibrant' : 'clean')}
+              trackColor={{ false: '#E5E5EA', true: '#AF52DE' }}
+              thumbColor="#fff"
+            />
           </View>
+
         </View>
 
         {/* Admin section — only visible to admins */}
@@ -171,13 +183,23 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: '#E8571A',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  email: {
-    fontSize: 15,
-    fontWeight: '600',
+  avatarImg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  avatarInitial: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  displayName: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#1C1C1E',
     marginBottom: 3,
   },
@@ -275,6 +297,39 @@ const styles = StyleSheet.create({
   rowValue: {
     fontSize: 14,
     color: '#8E8E93',
+  },
+  rowSub: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 1,
+  },
+  segmentWrap: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 8,
+    padding: 2,
+    gap: 2,
+  },
+  seg: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  segActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  segText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  segTextActive: {
+    color: '#1C1C1E',
   },
   qualityCard: {
     flexDirection: 'row',
