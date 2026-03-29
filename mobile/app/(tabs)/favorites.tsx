@@ -3,8 +3,8 @@ import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import AppBackground from '../../components/AppBackground'
 import { useTranslation } from 'react-i18next'
+import { useMemo } from 'react'
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   StyleSheet,
@@ -17,6 +17,8 @@ import { useFavorites } from '../../hooks/useFavorites'
 import { usePlaces } from '../../hooks/usePlaces'
 import { useSession } from '../../hooks/useSession'
 import { supabase } from '../../lib/supabase'
+import { useThemeColors } from '../../contexts/ThemeContext'
+import { ThemeColors } from '../../constants/themes'
 
 function photoUrl(path: string) {
   return supabase.storage.from('place-photos').getPublicUrl(path).data.publicUrl
@@ -28,6 +30,8 @@ export default function FavoritesScreen() {
   const { session } = useSession()
   const { favoriteIds, toggleFavorite } = useFavorites()
   const { data } = usePlaces()
+  const colors = useThemeColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const allPlaces = data?.pages.flat() ?? []
   const favoritePlaces = allPlaces.filter(p => favoriteIds.includes(p.id))
@@ -108,102 +112,104 @@ export default function FavoritesScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 16,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 40,
-  },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(232,87,26,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  emptyBody: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#3C3C43',
-    textAlign: 'center',
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: '#8E8E93',
-    textAlign: 'center',
-  },
-  loginBtn: {
-    marginTop: 8,
-    backgroundColor: '#E8571A',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  loginBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  list: {
-    paddingHorizontal: 24,
-    paddingBottom: 100,
-    gap: 10,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-  },
-  thumb: {
-    width: 70,
-    height: 70,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(200,200,210,0.3)',
-  },
-  thumbFallback: {
-    backgroundColor: 'rgba(200,200,210,0.4)',
-  },
-  cardBody: {
-    flex: 1,
-    gap: 4,
-  },
-  cardName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-  cardSub: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-})
+function createStyles(c: ThemeColors) {
+  return StyleSheet.create({
+    title: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: c.textPrimary,
+      paddingHorizontal: 24,
+      paddingTop: 8,
+      paddingBottom: 16,
+    },
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyState: {
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 40,
+    },
+    emptyIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: 'rgba(232,87,26,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: c.textPrimary,
+    },
+    emptyBody: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: c.textSecondary,
+      textAlign: 'center',
+    },
+    emptyHint: {
+      fontSize: 14,
+      color: c.textTertiary,
+      textAlign: 'center',
+    },
+    loginBtn: {
+      marginTop: 8,
+      backgroundColor: '#E8571A',
+      paddingHorizontal: 32,
+      paddingVertical: 14,
+      borderRadius: 14,
+    },
+    loginBtnText: {
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    list: {
+      paddingHorizontal: 24,
+      paddingBottom: 100,
+      gap: 10,
+    },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.surfaceBorder,
+      gap: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+    },
+    thumb: {
+      width: 70,
+      height: 70,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: c.thumbFallback,
+    },
+    thumbFallback: {
+      backgroundColor: c.thumbFallback,
+    },
+    cardBody: {
+      flex: 1,
+      gap: 4,
+    },
+    cardName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: c.textPrimary,
+    },
+    cardSub: {
+      fontSize: 13,
+      color: c.textSecondary,
+    },
+  })
+}

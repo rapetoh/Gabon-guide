@@ -3,15 +3,18 @@ import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Dimensions,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -29,6 +32,8 @@ import { useAnalytics } from '../../hooks/useAnalytics'
 import { supabase } from '../../lib/supabase'
 import { getWhatsAppUrl } from '../../utils/formatWhatsApp'
 import { isOpenNow } from '../../utils/isOpenNow'
+import { useThemeColors } from '../../contexts/ThemeContext'
+import { ThemeColors } from '../../constants/themes'
 
 const { width } = Dimensions.get('window')
 const HERO_HEIGHT = 320
@@ -65,6 +70,8 @@ export default function PlaceDetailScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const insets = useSafeAreaInsets()
+  const colors = useThemeColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const { session } = useSession()
   const analytics = useAnalytics()
@@ -79,6 +86,7 @@ export default function PlaceDetailScreen() {
   const [reviewComment, setReviewComment] = useState('')
   const [hoursOpen, setHoursOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
+  const [mapsSheetOpen, setMapsSheetOpen] = useState(false)
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null)
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([])
   const [routeSteps, setRouteSteps] = useState<{ instruction: string; distance: string }[]>([])
@@ -118,18 +126,21 @@ export default function PlaceDetailScreen() {
   if (!place) {
     return (
       <View style={styles.loadingScreen}>
-        <Text style={{ color: '#8E8E93' }}>{t('place.notFound')}</Text>
+        <Text style={{ color: colors.textSecondary }}>{t('place.notFound')}</Text>
       </View>
     )
   }
 
-  const photos = (place as any).photos
+  const allPhotos = (place as any).photos
     ?.filter((ph: any) => !ph.is_deleted)
     ?.sort((a: any, b: any) => {
       if (a.is_primary) return -1
       if (b.is_primary) return 1
       return a.position - b.position
     }) ?? []
+
+  const photos = allPhotos.filter((ph: any) => !ph.is_menu)
+  const menuPhotos = allPhotos.filter((ph: any) => ph.is_menu)
 
   const p = place!
   const primaryPhoto = photos[0]
@@ -316,8 +327,57 @@ export default function PlaceDetailScreen() {
     toggleFavorite.mutate(p.id)
   }
 
+  async function handleShare() {
+    analytics.ctaShareTapped(p.id, p.name)
+    const description = lang === 'fr' ? p.description_fr : p.description_en
+    const subtitle = description ? description.slice(0, 100) + (description.length > 100 ? '…' : '') : ''
+    await Share.share({
+      title: p.name,
+      message: subtitle ? `${p.name} — ${subtitle}\nokili://place/${p.id}` : `${p.name}\nokili://place/${p.id}`,
+    })
+  }
+
+  function handleOpenMapsChoice() {
+    if (Platform.OS === 'ios') {
+      const options = [
+        lang === 'fr' ? 'Annuler' : 'Cancel',
+        lang === 'fr' ? 'Navigation intégrée' : 'In-App Navigation',
+        'Apple Maps',
+        'Google Maps',
+      ]
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: 0, title: lang === 'fr' ? 'Ouvrir dans…' : 'Open in…' },
+        (idx) => {
+          if (idx === 1) { setRouteCoords([]); setMapOpen(true) }
+          else if (idx === 2) openAppleMaps()
+          else if (idx === 3) openGoogleMaps()
+        }
+      )
+    } else {
+      setMapsSheetOpen(true)
+    }
+  }
+
+  function openAppleMaps() {
+    if (!p.latitude || !p.longitude) return
+    const name = encodeURIComponent(p.name)
+    Linking.openURL(`maps://?q=${name}&ll=${p.latitude},${p.longitude}`)
+  }
+
+  async function openGoogleMaps() {
+    if (!p.latitude || !p.longitude) return
+    const url = `comgooglemaps://?q=${p.latitude},${p.longitude}&center=${p.latitude},${p.longitude}`
+    const canOpen = await Linking.canOpenURL(url)
+    if (canOpen) {
+      Linking.openURL(url)
+    } else {
+      // Fallback: open in browser
+      Linking.openURL(`https://maps.google.com/?q=${p.latitude},${p.longitude}`)
+    }
+  }
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+    <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
@@ -349,14 +409,14 @@ export default function PlaceDetailScreen() {
           <View style={[styles.navRow, { top: insets.top + 12 }]}>
             <Pressable onPress={() => router.back()} style={styles.navBtn}>
               <BlurView intensity={60} tint="light" style={styles.navBtnBlur}>
-                <Ionicons name="chevron-back" size={20} color="#1C1C1E" />
+                <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
               </BlurView>
             </Pressable>
 
             <View style={styles.navRight}>
-              <Pressable style={styles.navBtn}>
+              <Pressable style={styles.navBtn} onPress={handleShare}>
                 <BlurView intensity={60} tint="light" style={styles.navBtnBlur}>
-                  <Ionicons name="share-outline" size={20} color="#1C1C1E" />
+                  <Ionicons name="share-outline" size={20} color={colors.textPrimary} />
                 </BlurView>
               </Pressable>
               <Pressable onPress={handleSave} style={styles.navBtn}>
@@ -364,7 +424,7 @@ export default function PlaceDetailScreen() {
                   <Ionicons
                     name={saved ? 'heart' : 'heart-outline'}
                     size={20}
-                    color={saved ? '#E8571A' : '#1C1C1E'}
+                    color={saved ? '#E8571A' : colors.textPrimary}
                   />
                 </BlurView>
               </Pressable>
@@ -424,7 +484,7 @@ export default function PlaceDetailScreen() {
               {zone && (
                 <>
                   <View style={styles.ratingDivider} />
-                  <Ionicons name="location-outline" size={13} color="#8E8E93" />
+                  <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
                   <Text style={styles.ratingZone}>{zone.name}</Text>
                 </>
               )}
@@ -436,15 +496,15 @@ export default function PlaceDetailScreen() {
             {p.phone && (
               <Pressable style={styles.actionItem} onPress={handleCall}>
                 <View style={styles.actionCircle}>
-                  <Ionicons name="call-outline" size={22} color="#1C1C1E" />
+                  <Ionicons name="call-outline" size={22} color={colors.textPrimary} />
                 </View>
                 <Text style={styles.actionLabel}>{lang === 'fr' ? 'Appeler' : 'Call'}</Text>
               </Pressable>
             )}
-            {p.address && (
-              <Pressable style={styles.actionItem} onPress={handleMap}>
+            {(p.address || (p.latitude && p.longitude)) && (
+              <Pressable style={styles.actionItem} onPress={handleOpenMapsChoice}>
                 <View style={styles.actionCircle}>
-                  <Ionicons name="map-outline" size={22} color="#1C1C1E" />
+                  <Ionicons name="map-outline" size={22} color={colors.textPrimary} />
                 </View>
                 <Text style={styles.actionLabel}>{lang === 'fr' ? 'Carte' : 'Map'}</Text>
               </Pressable>
@@ -452,7 +512,7 @@ export default function PlaceDetailScreen() {
             {p.website && (
               <Pressable style={styles.actionItem} onPress={handleWebsite}>
                 <View style={styles.actionCircle}>
-                  <Ionicons name="globe-outline" size={22} color="#1C1C1E" />
+                  <Ionicons name="globe-outline" size={22} color={colors.textPrimary} />
                 </View>
                 <Text style={styles.actionLabel}>Web</Text>
               </Pressable>
@@ -487,7 +547,7 @@ export default function PlaceDetailScreen() {
                   onPress={() => setHoursOpen(o => !o)}
                 >
                   <View style={styles.detailIconWrap}>
-                    <Ionicons name="time-outline" size={18} color="#8E8E93" />
+                    <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
                   </View>
                   <Text style={styles.detailLabel}>
                     {lang === 'fr' ? 'Horaires' : 'Hours'}
@@ -495,7 +555,7 @@ export default function PlaceDetailScreen() {
                   <Ionicons
                     name={hoursOpen ? 'chevron-up' : 'chevron-down'}
                     size={16}
-                    color="#8E8E93"
+                    color={colors.textSecondary}
                   />
                 </Pressable>
 
@@ -524,9 +584,9 @@ export default function PlaceDetailScreen() {
             {/* Address card */}
             {p.address && (
               <View style={[styles.detailCard, { marginTop: 10 }]}>
-                <Pressable style={styles.detailCardRow} onPress={handleMap}>
+                <Pressable style={styles.detailCardRow} onPress={handleOpenMapsChoice}>
                   <View style={styles.detailIconWrap}>
-                    <Ionicons name="location-outline" size={18} color="#8E8E93" />
+                    <Ionicons name="location-outline" size={18} color={colors.textSecondary} />
                   </View>
                   <Text style={[styles.detailLabel, { flex: 1 }]} numberOfLines={2}>{p.address}</Text>
                   <Ionicons name="open-outline" size={15} color="#E8571A" />
@@ -549,6 +609,24 @@ export default function PlaceDetailScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                 {photos.map((ph: any, idx: number) => (
                   <View key={ph.id ?? idx} style={styles.photoThumb}>
+                    <Image
+                      source={{ uri: photoUrl(ph.storage_path) }}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* ── Menu ── */}
+          {menuPhotos.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Menu' : 'Menu'}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                {menuPhotos.map((ph: any, idx: number) => (
+                  <View key={ph.id ?? idx} style={styles.menuThumb}>
                     <Image
                       source={{ uri: photoUrl(ph.storage_path) }}
                       style={StyleSheet.absoluteFill}
@@ -611,7 +689,7 @@ export default function PlaceDetailScreen() {
                     <TextInput
                       style={styles.reviewInput}
                       placeholder={lang === 'fr' ? 'Commentaire (optionnel)' : 'Comment (optional)'}
-                      placeholderTextColor="#8E8E93"
+                      placeholderTextColor={colors.textPlaceholder}
                       value={reviewComment}
                       onChangeText={setReviewComment}
                       multiline
@@ -784,7 +862,7 @@ export default function PlaceDetailScreen() {
             </View>
           ) : (
             <View style={[styles.mapSheetMap, styles.mapNoCoords]}>
-              <Ionicons name="map-outline" size={40} color="rgba(0,0,0,0.2)" />
+              <Ionicons name="map-outline" size={40} color={colors.iconMuted} />
               <Text style={styles.mapNoCoordsText}>
                 {lang === 'fr' ? 'Coordonnées non disponibles' : 'Coordinates not available'}
               </Text>
@@ -832,6 +910,35 @@ export default function PlaceDetailScreen() {
         </View>
       </Modal>
 
+      {/* ── Maps Choice Sheet (Android) ── */}
+      <Modal
+        visible={mapsSheetOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setMapsSheetOpen(false)}
+      >
+        <Pressable style={styles.mapsOverlay} onPress={() => setMapsSheetOpen(false)}>
+          <View style={[styles.mapsSheet, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+            <Text style={styles.mapsSheetTitle}>{lang === 'fr' ? 'Ouvrir dans…' : 'Open in…'}</Text>
+            <Pressable style={styles.mapsOption} onPress={() => { setMapsSheetOpen(false); setRouteCoords([]); setMapOpen(true) }}>
+              <Ionicons name="navigate-outline" size={22} color={colors.textPrimary} />
+              <Text style={styles.mapsOptionText}>{lang === 'fr' ? 'Navigation intégrée' : 'In-App Navigation'}</Text>
+            </Pressable>
+            <Pressable style={styles.mapsOption} onPress={() => { setMapsSheetOpen(false); openAppleMaps() }}>
+              <Ionicons name="map-outline" size={22} color={colors.textPrimary} />
+              <Text style={styles.mapsOptionText}>Apple Maps</Text>
+            </Pressable>
+            <Pressable style={styles.mapsOption} onPress={() => { setMapsSheetOpen(false); openGoogleMaps() }}>
+              <Ionicons name="map" size={22} color="#4285F4" />
+              <Text style={styles.mapsOptionText}>Google Maps</Text>
+            </Pressable>
+            <Pressable style={[styles.mapsOption, { marginTop: 8 }]} onPress={() => setMapsSheetOpen(false)}>
+              <Text style={[styles.mapsOptionText, { color: colors.textSecondary }]}>{lang === 'fr' ? 'Annuler' : 'Cancel'}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* ── Bottom CTA ── */}
       <View style={[styles.ctaWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         {p.whatsapp ? (
@@ -863,10 +970,11 @@ export default function PlaceDetailScreen() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles(c: ThemeColors) {
+  return StyleSheet.create({
   loadingScreen: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.bgPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -875,7 +983,7 @@ const styles = StyleSheet.create({
   hero: {
     width,
     height: HERO_HEIGHT,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: c.shimmer,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
     overflow: 'hidden',
@@ -924,7 +1032,7 @@ const styles = StyleSheet.create({
 
   // Title card
   titleCard: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 18,
     shadowColor: '#000',
@@ -945,7 +1053,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: c.surfaceBorder,
   },
   badgeOpen:   { backgroundColor: 'rgba(52,199,89,0.12)' },
   badgeClosed: { backgroundColor: 'rgba(255,59,48,0.1)' },
@@ -955,12 +1063,12 @@ const styles = StyleSheet.create({
   badgeText:     { fontSize: 13, fontWeight: '600' },
   badgeTextOpen: { color: '#34C759' },
   badgeTextClosed:{ color: '#FF3B30' },
-  badgeTextGray: { fontSize: 13, fontWeight: '500', color: '#6B7280' },
+  badgeTextGray: { fontSize: 13, fontWeight: '500', color: c.textSecondary },
 
   placeName: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#1C1C1E',
+    color: c.textPrimary,
     letterSpacing: -0.5,
   },
   ratingRow: {
@@ -971,21 +1079,21 @@ const styles = StyleSheet.create({
   ratingValue: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: c.textPrimary,
   },
   ratingCount: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: c.textSecondary,
   },
   ratingDivider: {
     width: 1,
     height: 12,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: c.separator,
     marginHorizontal: 2,
   },
   ratingZone: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: c.textSecondary,
   },
 
   // Action grid
@@ -1004,7 +1112,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: c.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1018,7 +1126,7 @@ const styles = StyleSheet.create({
   actionLabel: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#3C3C43',
+    color: c.textSecondary,
     textAlign: 'center',
   },
 
@@ -1034,7 +1142,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: c.textPrimary,
   },
   seeAll: {
     fontSize: 14,
@@ -1043,17 +1151,17 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 15,
-    color: '#3C3C43',
+    color: c.textSecondary,
     lineHeight: 22,
   },
 
   // Detail cards
   detailCard: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: c.surface,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
+    borderColor: c.surfaceBorder,
   },
   detailCardRow: {
     flexDirection: 'row',
@@ -1065,7 +1173,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: c.surfaceBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1073,11 +1181,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
-    color: '#1C1C1E',
+    color: c.textPrimary,
   },
   hoursTable: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: c.separator,
     paddingVertical: 4,
   },
   hoursTableRow: {
@@ -1088,12 +1196,12 @@ const styles = StyleSheet.create({
   },
   dayLabel: {
     fontSize: 14,
-    color: '#1C1C1E',
+    color: c.textPrimary,
     fontWeight: '500',
   },
   dayHours: {
     fontSize: 14,
-    color: '#6B7280',
+    color: c.textSecondary,
   },
 
   // Photos
@@ -1102,14 +1210,21 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: 'rgba(200,200,210,0.3)',
+    backgroundColor: c.thumbFallback,
+  },
+  menuThumb: {
+    width: 200,
+    height: 260,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: c.thumbFallback,
   },
 
   // Reviews
   reviewCount: {
     fontSize: 17,
     fontWeight: '400',
-    color: '#8E8E93',
+    color: c.textSecondary,
   },
   reviewLoginPrompt: {
     flexDirection: 'row',
@@ -1127,28 +1242,28 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   reviewForm: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: c.surface,
     borderRadius: 16,
     padding: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
+    borderColor: c.surfaceBorder,
   },
   reviewFormLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C1C1E',
+    color: c.textPrimary,
   },
   starRow: {
     flexDirection: 'row',
     gap: 6,
   },
   reviewInput: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.inputBg,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#1C1C1E',
+    color: c.inputText,
     minHeight: 80,
     textAlignVertical: 'top',
   },
@@ -1162,12 +1277,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
+    borderColor: c.surfaceBorder,
   },
   reviewCancelText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C1C1E',
+    color: c.textPrimary,
   },
   reviewSubmitBtn: {
     flex: 1,
@@ -1182,16 +1297,16 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   reviewCard: {
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: c.surface,
     borderRadius: 14,
     padding: 14,
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: c.surfaceBorder,
   },
   reviewCardOwn: {
     borderColor: 'rgba(232,87,26,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: c.surfaceElevated,
   },
   reviewCardHeader: {
     flexDirection: 'row',
@@ -1214,11 +1329,11 @@ const styles = StyleSheet.create({
   reviewName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C1C1E',
+    color: c.textPrimary,
   },
   reviewDate: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: c.textSecondary,
     marginTop: 1,
   },
   reviewStars: {
@@ -1227,12 +1342,12 @@ const styles = StyleSheet.create({
   },
   reviewComment: {
     fontSize: 14,
-    color: '#3C3C43',
+    color: c.textSecondary,
     lineHeight: 20,
   },
   noReviewsText: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: c.textSecondary,
     textAlign: 'center',
     paddingVertical: 8,
   },
@@ -1240,13 +1355,13 @@ const styles = StyleSheet.create({
   // Map bottom sheet
   mapSheet: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.bgPrimary,
   },
   mapSheetHeader: {
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
-    backgroundColor: '#fff',
+    backgroundColor: c.surfaceElevated,
     alignItems: 'center',
     gap: 6,
   },
@@ -1254,18 +1369,18 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    backgroundColor: c.sheetHandle,
     marginBottom: 8,
   },
   mapSheetTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: c.textPrimary,
     textAlign: 'center',
   },
   mapSheetAddress: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: c.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -1280,32 +1395,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: c.shimmer,
   },
   mapNoCoordsText: {
     fontSize: 14,
-    color: 'rgba(0,0,0,0.4)',
+    color: c.textSecondary,
   },
   mapSheetFooter: {
     flexDirection: 'row',
     gap: 10,
     paddingHorizontal: 20,
     paddingTop: 12,
-    backgroundColor: '#fff',
+    backgroundColor: c.surfaceElevated,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: c.separator,
   },
   mapSheetClose: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.inputBg,
     alignItems: 'center',
   },
   mapSheetCloseText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1C1C1E',
+    color: c.textPrimary,
   },
   mapSheetDirections: {
     flex: 1,
@@ -1332,7 +1447,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: c.surfaceInverted,
   },
   mapSheetNavigateText: {
     fontSize: 14,
@@ -1348,7 +1463,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#1A1A1E',
     borderRadius: 16,
     padding: 14,
     shadowColor: '#000',
@@ -1421,7 +1536,7 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 20,
     paddingTop: 12,
-    backgroundColor: 'rgba(242,242,247,0.95)',
+    backgroundColor: c.bgPrimary,
   },
   ctaBtn: {
     flexDirection: 'row',
@@ -1430,7 +1545,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 16,
     borderRadius: 28,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: c.surfaceInverted,
   },
   ctaBtnSaved: {
     backgroundColor: '#E8571A',
@@ -1440,4 +1555,41 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-})
+
+  // Maps choice sheet (Android)
+  mapsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  mapsSheet: {
+    backgroundColor: c.bgPrimary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingHorizontal: 16,
+  },
+  mapsSheetTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: c.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  mapsOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: c.separator,
+  },
+  mapsOptionText: {
+    fontSize: 16,
+    color: c.textPrimary,
+    fontWeight: '500',
+  },
+  })
+}

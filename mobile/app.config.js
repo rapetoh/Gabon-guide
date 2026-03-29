@@ -45,6 +45,7 @@ export default {
     plugins: [
       'expo-router',
       'expo-apple-authentication',
+      'expo-video',
       [
         'expo-location',
         {

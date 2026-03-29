@@ -28,12 +28,20 @@ export default async function EditPlacePage({ params }: { params: Promise<{ id: 
         </Link>
         <span className="text-gray-200">/</span>
         <h1 className="text-xl font-bold text-gray-900">{place.name}</h1>
-        <Link
-          href={`/admin/places/${id}/photos`}
-          className="ml-auto text-sm text-orange-500 hover:text-orange-700 font-medium"
-        >
-          Photos →
-        </Link>
+        <div className="ml-auto flex items-center gap-4">
+          <Link
+            href={`/admin/places/${id}/videos`}
+            className="text-sm text-orange-500 hover:text-orange-700 font-medium"
+          >
+            Videos →
+          </Link>
+          <Link
+            href={`/admin/places/${id}/photos`}
+            className="text-sm text-orange-500 hover:text-orange-700 font-medium"
+          >
+            Photos →
+          </Link>
+        </div>
       </div>
       <PlaceForm place={place} />
     </div>

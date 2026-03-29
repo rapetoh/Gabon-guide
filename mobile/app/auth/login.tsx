@@ -1,7 +1,7 @@
 import * as AppleAuthentication from 'expo-apple-authentication'
 import * as WebBrowser from 'expo-web-browser'
 import { router } from 'expo-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -17,6 +17,8 @@ import {
 } from 'react-native'
 
 import { supabase } from '../../lib/supabase'
+import { useThemeColors } from '../../contexts/ThemeContext'
+import { ThemeColors } from '../../constants/themes'
 
 // Required for expo-web-browser OAuth redirect handling
 WebBrowser.maybeCompleteAuthSession()
@@ -25,6 +27,8 @@ type Mode = 'login' | 'register'
 
 export default function LoginScreen() {
   const { t } = useTranslation()
+  const colors = useThemeColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
@@ -171,7 +175,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder={t('auth.email')}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textPlaceholder}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -182,7 +186,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder={t('auth.password')}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textPlaceholder}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -248,149 +252,151 @@ export default function LoginScreen() {
 
 const ORANGE = '#E8571A'
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 48,
-  },
-  // Brand
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  brand: {
-    fontSize: 40,
-    fontWeight: '800',
-    color: ORANGE,
-    letterSpacing: -1,
-  },
-  tagline: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  // Toggle
-  toggleRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 24,
-  },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  toggleActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  toggleText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  toggleTextActive: {
-    color: '#1F2937',
-    fontWeight: '600',
-  },
-  // Form
-  form: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  input: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: '#1F2937',
-  },
-  forgotBtn: {
-    alignSelf: 'flex-end',
-  },
-  forgotText: {
-    fontSize: 13,
-    color: ORANGE,
-    fontWeight: '500',
-  },
-  primaryBtn: {
-    backgroundColor: ORANGE,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  primaryBtnDisabled: {
-    opacity: 0.6,
-  },
-  primaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  // Divider
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-    gap: 12,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  dividerText: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    fontWeight: '500',
-  },
-  // Social
-  socialButtons: {
-    gap: 12,
-  },
-  socialBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 10,
-    backgroundColor: '#FFFFFF',
-  },
-  socialBtnDisabled: {
-    opacity: 0.6,
-  },
-  socialIcon: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#4285F4',
-  },
-  socialBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  appleBtn: {
-    height: 50,
-    width: '100%',
-  },
-})
+function createStyles(c: ThemeColors) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: c.surfaceElevated,
+    },
+    scroll: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+      paddingVertical: 48,
+    },
+    // Brand
+    header: {
+      alignItems: 'center',
+      marginBottom: 40,
+    },
+    brand: {
+      fontSize: 40,
+      fontWeight: '800',
+      color: ORANGE,
+      letterSpacing: -1,
+    },
+    tagline: {
+      fontSize: 14,
+      color: c.textSecondary,
+      marginTop: 4,
+    },
+    // Toggle
+    toggleRow: {
+      flexDirection: 'row',
+      backgroundColor: c.toggleBg,
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 24,
+    },
+    toggleBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: 'center',
+    },
+    toggleActive: {
+      backgroundColor: c.toggleActive,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    toggleText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: c.textSecondary,
+    },
+    toggleTextActive: {
+      color: c.textPrimary,
+      fontWeight: '600',
+    },
+    // Form
+    form: {
+      gap: 12,
+      marginBottom: 24,
+    },
+    input: {
+      backgroundColor: c.inputBg,
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontSize: 15,
+      color: c.inputText,
+    },
+    forgotBtn: {
+      alignSelf: 'flex-end',
+    },
+    forgotText: {
+      fontSize: 13,
+      color: ORANGE,
+      fontWeight: '500',
+    },
+    primaryBtn: {
+      backgroundColor: ORANGE,
+      borderRadius: 12,
+      paddingVertical: 16,
+      alignItems: 'center',
+      marginTop: 4,
+    },
+    primaryBtnDisabled: {
+      opacity: 0.6,
+    },
+    primaryBtnText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    // Divider
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 24,
+      gap: 12,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: c.divider,
+    },
+    dividerText: {
+      fontSize: 13,
+      color: c.textSecondary,
+      fontWeight: '500',
+    },
+    // Social
+    socialButtons: {
+      gap: 12,
+    },
+    socialBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      borderRadius: 12,
+      paddingVertical: 14,
+      gap: 10,
+      backgroundColor: c.inputBg,
+    },
+    socialBtnDisabled: {
+      opacity: 0.6,
+    },
+    socialIcon: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: '#4285F4',
+    },
+    socialBtnText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: c.textPrimary,
+    },
+    appleBtn: {
+      height: 50,
+      width: '100%',
+    },
+  })
+}

@@ -619,6 +619,192 @@ All fields + full validation parity with mobile PlaceForm:
 
 ---
 
+## Phase 7 — ViralBite-Inspired Features — 🔄 IN PROGRESS — March 2026
+
+**Context:** After reviewing ViralBite (a US-based restaurant discovery app), several high-value UX improvements were identified. All changes are additive — no existing features are modified or broken.
+
+**Implementation order:** Share → Maps Choice → Menu Photos → Onboarding → Restaurant Owner Role → Video Feed (last)
+
+---
+
+### 7.1 Share Functionality
+
+**Goal:** Wire up the existing Share button (UI already present on place detail, handler missing).
+
+- [ ] Wire up Share Pressable in `mobile/app/place/[id].tsx` using React Native `Share` API
+- [ ] Share content: place name + short description + deep link (`okili://place/<id>`)
+- [ ] Call `ctaShareTapped()` analytics event on tap (event already defined, never called)
+
+**QA tests:**
+- [ ] Tap Share on place detail → native share sheet appears
+- [ ] Share sheet contains correct place name
+- [ ] Analytics event fires (`cta_share_tapped`)
+
+---
+
+### 7.2 Apple Maps / Google Maps Choice for Directions
+
+**Goal:** When user taps the Map button or address, show a choice instead of going straight to in-app navigation.
+
+- [ ] Add a bottom action sheet in `mobile/app/place/[id].tsx` with 3 options:
+  - In-App Navigation (existing map modal)
+  - Open in Apple Maps
+  - Open in Google Maps (hidden if not installed — use `Linking.canOpenURL`)
+- [ ] Use `Linking.openURL` with `maps://` scheme for Apple Maps
+- [ ] Use `Linking.openURL` with `comgooglemaps://` scheme for Google Maps
+
+**QA tests:**
+- [ ] Tap "Map" or address → choice bottom sheet appears
+- [ ] "In-App" → existing navigation modal opens
+- [ ] "Apple Maps" → opens Apple Maps with place coordinates
+- [ ] "Google Maps" → opens Google Maps; option hidden if not installed
+
+---
+
+### 7.3 Menu Photos
+
+**Goal:** Restaurants can have dedicated menu photo(s) separate from the general gallery.
+
+**DB change (migration 005):**
+- [ ] Add `is_menu boolean default false` to `photos` table
+
+**Mobile:**
+- [ ] Add "Menu" section to `mobile/app/place/[id].tsx` (below photos gallery, only shown if menu photos exist)
+- [ ] Menu photos excluded from the regular gallery query (filter `is_menu = false` for gallery, `is_menu = true` for menu section)
+
+**Admin (web):**
+- [ ] Add "Menu Photos" upload section in `web/app/admin/places/[id]/photos/page.tsx` with a toggle to mark photos as menu photos
+
+**Admin (mobile):**
+- [ ] Add "Menu Photos" section in `mobile/app/admin/place/[id]/edit.tsx`
+
+**QA tests:**
+- [ ] Admin can upload a photo tagged as menu
+- [ ] Menu section appears on place detail only if menu photos exist
+- [ ] Menu photos do NOT appear in the regular photo gallery
+- [ ] Menu photos can be deleted from admin
+
+---
+
+### 7.4 Onboarding Flow
+
+**Goal:** First-launch onboarding to capture user preferences (skippable — no forced sign-in).
+
+**DB change (migration 006):**
+- [ ] Add `preferred_zones text[] default '{}'` to `profiles` table
+- [ ] Add `preferred_vibes text[] default '{}'` to `profiles` table
+
+**Files to create:**
+- [ ] `mobile/app/onboarding/_layout.tsx`
+- [ ] `mobile/app/onboarding/index.tsx` — Welcome screen
+- [ ] `mobile/app/onboarding/areas.tsx` — "Which areas do you visit?"
+- [ ] `mobile/app/onboarding/preferences.tsx` — Cuisine / vibe profile
+- [ ] `mobile/app/onboarding/location.tsx` — Location permission request
+
+**Files to modify:**
+- [ ] `mobile/app/_layout.tsx` — on first launch, check AsyncStorage flag `onboarding_completed`; if not set, redirect to `/onboarding`
+- [ ] Each onboarding screen has an X / Skip button that sets `onboarding_completed = true` in AsyncStorage and navigates to `/(tabs)/`
+- [ ] If user is logged in at completion: save `preferred_zones` + `preferred_vibes` to `profiles` table
+- [ ] If user is NOT logged in at completion: save to AsyncStorage; merge to profile on next login
+
+**QA tests:**
+- [ ] First install → onboarding shows before home tab
+- [ ] Tap X on any step → lands on home tab normally; onboarding never shows again
+- [ ] Complete all steps → preferences saved; home tab loads
+- [ ] Second launch → onboarding does NOT show again
+- [ ] Complete onboarding while not logged in → preferences saved to AsyncStorage
+- [ ] Log in after skipping → account created, local preferences not lost
+
+---
+
+### 7.5 Restaurant Owner Role
+
+**Goal:** Restaurant owners get a restricted admin account to manage only their own listing.
+
+**DB change (migration 007):**
+- [ ] Add `role text not null default 'user'` to `profiles` table (values: `'user'`, `'restaurant_owner'`, `'admin'`)
+- [ ] Add `owner_id uuid references profiles(id)` to `places` table (nullable — not all places have an owner account yet)
+- [ ] New RLS policy: `restaurant_owner` can UPDATE `places` WHERE `owner_id = auth.uid()`
+- [ ] New RLS policy: `restaurant_owner` can INSERT/DELETE `photos` WHERE `place_id` matches their owned place
+
+**Files to create:**
+- [ ] `mobile/app/restaurant-admin/_layout.tsx` — auth guard: role must be `restaurant_owner`
+- [ ] `mobile/app/restaurant-admin/index.tsx` — their single place dashboard
+- [ ] `mobile/app/restaurant-admin/edit.tsx` — edit their place info, upload photos/menus
+
+**Files to modify:**
+- [ ] `mobile/app/(tabs)/profile.tsx` — show "Manage My Restaurant" link if `role = 'restaurant_owner'`
+- [ ] `mobile/hooks/useIsAdmin.ts` (or relevant auth hook) — also expose `userRole` field
+
+**QA tests:**
+- [ ] User with `role = 'user'` → no "Manage My Restaurant" link visible
+- [ ] User with `role = 'restaurant_owner'` → "Manage My Restaurant" link visible
+- [ ] Restaurant owner can edit their place name/description/hours
+- [ ] Restaurant owner CANNOT edit another restaurant (RLS blocks + UI only shows their place)
+- [ ] Restaurant owner CANNOT access the full admin dashboard
+- [ ] Admin can still edit all places
+
+---
+
+### 7.6 Video Feed ✅ IMPLEMENTED (2026-03-28)
+
+**Goal:** TikTok-style vertical video feed as primary home screen.
+
+**DB change (migration 010):**
+- [x] New `videos` table: `id`, `place_id`, `storage_path`, `thumbnail_url`, `caption`, `position`, `created_at`
+- [x] RLS: public read; admins + restaurant owners can manage their own videos
+- [ ] **Manual step:** Create `place-videos` Storage bucket in Supabase dashboard (Public: ON)
+
+**Mobile — implemented:**
+- [x] `expo-video` installed + added to `app.config.js` plugins
+- [x] `mobile/hooks/useVideoFeed.ts` — infinite query, places ranked (promoted first, newest), with videos + gallery photos
+- [x] `mobile/components/VideoFeedCard.tsx` — full-screen card:
+  - Video → plays with `expo-video`, auto-play/pause driven by `isActive` prop
+  - No video → auto-slides gallery photos with crossfade every 3.5 s
+  - Right-side panel: Save (heart/favorites), Share (native sheet), Menu (if menu photos exist)
+  - Bottom overlay: place name, category · zone, description excerpt, "View place" button
+  - Mute/unmute button (top-right, video cards only)
+  - Photo progress dots (slideshow cards, multiple photos)
+  - Promoted badge (top-left)
+- [x] `mobile/app/(tabs)/index.tsx` — replaced with full-screen vertical FlatList:
+  - `pagingEnabled` + `snapToInterval` for one-card-per-swipe
+  - `viewabilityConfig` (50% threshold) drives `activeIndex` → controls play/pause
+  - `getItemLayout` for perf (no layout measurement on scroll)
+  - Infinite scroll via `fetchNextPage`
+
+**Web admin — implemented:**
+- [x] `web/components/VideoManager.tsx` — upload / delete / caption-edit for place videos
+- [x] `web/app/admin/places/[id]/videos/page.tsx` — videos management page
+- [x] "Videos →" link added to place edit page header
+
+**QA tests:**
+- [ ] Swipe up → next place loads; swipe down → previous place
+- [ ] Place with video → video autoplays when card enters view; pauses when scrolled away
+- [ ] Place without video → photos slide automatically (crossfade) when card is active
+- [ ] Mute button toggles audio on video cards; state persists across swipes
+- [ ] Save (heart) → adds/removes from favorites; requires login if not authed
+- [ ] Share → native share sheet opens with place name + deep link
+- [ ] Menu button (only visible when place has menu photos) → opens place detail
+- [ ] "View place" CTA → navigates to `/place/[id]`
+- [ ] Infinite scroll → next page loads when near end of feed
+- [ ] Web admin: upload video → appears in list; delete → removed from list + storage
+- [ ] Web admin: add/edit caption → saved to DB
+
+---
+
+### Phase 7 — QA Gate (run before marking Phase 7 complete)
+
+- [ ] Share: share sheet appears + correct content + analytics fires
+- [ ] Maps choice: all 4 map tests pass
+- [ ] Menu photos: all 4 menu tests pass
+- [ ] Onboarding: all 6 onboarding tests pass
+- [ ] Restaurant owner role: all 6 role tests pass
+- [ ] Video feed: all 11 video QA tests pass (see 7.6 above)
+- [ ] No regressions: explore, favorites, map, place detail, admin — all still work
+- [ ] TypeScript: `npx tsc --noEmit` → 0 errors
+
+---
+
 ## Deferred — Post-MVP Backlog
 
 - User reviews and ratings system

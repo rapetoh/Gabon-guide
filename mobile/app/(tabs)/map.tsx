@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { usePlaces, Place } from '../../hooks/usePlaces'
 import { supabase } from '../../lib/supabase'
+import { useThemeColors } from '../../contexts/ThemeContext'
+import { ThemeColors } from '../../constants/themes'
 
 // Libreville, Gabon — city center
 const LIBREVILLE: Region = {
@@ -34,6 +36,8 @@ export default function MapScreen() {
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView>(null)
+  const colors = useThemeColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selected, setSelected] = useState<Place | null>(null)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
@@ -89,7 +93,7 @@ export default function MapScreen() {
               tracksViewChanges={false}
             >
               {isSelected ? (
-                // Selected: dark pill + green dot
+                // Selected: brand pill + green dot
                 <View style={styles.pinWrap}>
                   <View style={styles.pinSelected}>
                     <Text style={styles.pinSelectedText} numberOfLines={1}>
@@ -99,7 +103,7 @@ export default function MapScreen() {
                   <View style={styles.pinSelectedDot} />
                 </View>
               ) : (
-                // Unselected: white pill with name + dark dot — large enough to tap
+                // Unselected: white pill with name + dark dot
                 <View style={styles.pinWrap}>
                   <View style={styles.pinUnselected}>
                     <Text style={styles.pinUnselectedText} numberOfLines={1}>
@@ -125,7 +129,7 @@ export default function MapScreen() {
       {/* Map controls */}
       <View style={[styles.controls, { top: insets.top + 60 }]}>
         <Pressable style={styles.controlBtn} onPress={centerOnLibreville}>
-          <Ionicons name="locate-outline" size={20} color="#1C1C1E" />
+          <Ionicons name="locate-outline" size={20} color={colors.textPrimary} />
         </Pressable>
         {userLocation && (
           <Pressable style={styles.controlBtn} onPress={centerOnUser}>
@@ -148,7 +152,7 @@ export default function MapScreen() {
                 contentFit="cover"
               />
             ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(200,200,210,0.4)' }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.thumbFallback }]} />
             )}
           </View>
           <View style={styles.placeCardBody}>
@@ -161,14 +165,14 @@ export default function MapScreen() {
             </Text>
           </View>
           <View style={styles.placeCardArrow}>
-            <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
+            <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} />
           </View>
           <Pressable
             style={styles.placeCardClose}
             onPress={(e) => { e.stopPropagation(); setSelected(null) }}
             hitSlop={8}
           >
-            <Ionicons name="close" size={16} color="#8E8E93" />
+            <Ionicons name="close" size={16} color={colors.iconMuted} />
           </Pressable>
         </Pressable>
       )}
@@ -176,162 +180,169 @@ export default function MapScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  // Top bar
-  topBar: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-  },
-  topTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-  },
-  topTitleText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  topCount: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
+function createStyles(c: ThemeColors) {
+  return StyleSheet.create({
+    // Top bar
+    topBar: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+    },
+    topTitle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: c.surfaceElevated,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: c.surfaceElevatedBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+    },
+    topTitleText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: c.textPrimary,
+    },
+    topCount: {
+      fontSize: 13,
+      color: c.textSecondary,
+    },
 
-  // Controls
-  controls: {
-    position: 'absolute',
-    right: 16,
-    gap: 10,
-  },
-  controlBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
+    // Controls
+    controls: {
+      position: 'absolute',
+      right: 16,
+      gap: 10,
+    },
+    controlBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.surfaceElevated,
+      borderWidth: 1,
+      borderColor: c.surfaceElevatedBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    },
 
-  // Pins
-  pinWrap: {
-    alignItems: 'center',
-    gap: 3,
-  },
-  pinUnselected: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-  },
-  pinUnselectedText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-  pinDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#1C1C1E',
-    borderWidth: 2,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  pinSelected: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: '#1C1C1E',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-  },
-  pinSelectedText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  pinSelectedDot: {
+    // Pins — always light since they sit on the map
+    pinWrap: {
+      alignItems: 'center',
+      gap: 3,
+    },
+    pinUnselected: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 16,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.1)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+    },
+    pinUnselectedText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#1C1C1E',
+    },
+    pinDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#1C1C1E',
+      borderWidth: 2,
+      borderColor: '#fff',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+    },
+    pinSelected: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 20,
+      backgroundColor: '#E8571A',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+    },
+    pinSelectedText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    pinSelectedDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#4ADE80',
+      borderWidth: 1.5,
+      borderColor: '#fff',
+    },
 
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4ADE80',
-    borderWidth: 1.5,
-    borderColor: '#fff',
-  },
-
-  // Place card
-  placeCard: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.97)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    gap: 12,
-  },
-  placeCardThumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(200,200,210,0.3)',
-  },
-  placeCardBody: {
-    flex: 1,
-    gap: 4,
-  },
-  placeCardName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  placeCardSub: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-  placeCardArrow: {
-    paddingRight: 4,
-  },
-  placeCardClose: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-})
+    // Place card
+    placeCard: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 20,
+      backgroundColor: c.surfaceElevated,
+      borderWidth: 1,
+      borderColor: c.surfaceElevatedBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
+      gap: 12,
+    },
+    placeCardThumb: {
+      width: 64,
+      height: 64,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: c.thumbFallback,
+    },
+    placeCardBody: {
+      flex: 1,
+      gap: 4,
+    },
+    placeCardName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: c.textPrimary,
+    },
+    placeCardSub: {
+      fontSize: 13,
+      color: c.textSecondary,
+    },
+    placeCardArrow: {
+      paddingRight: 4,
+    },
+    placeCardClose: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: c.closeButtonBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  })
+}

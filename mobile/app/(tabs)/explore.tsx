@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { router, useLocalSearchParams } from 'expo-router'
 import AppBackground from '../../components/AppBackground'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -24,6 +24,8 @@ import { useAnalytics } from '../../hooks/useAnalytics'
 import { supabase } from '../../lib/supabase'
 import { isOpenNow } from '../../utils/isOpenNow'
 import { getDistanceKm } from '../../utils/distance'
+import { useThemeColors } from '../../contexts/ThemeContext'
+import { ThemeColors } from '../../constants/themes'
 
 function photoUrl(path: string) {
   return supabase.storage.from('place-photos').getPublicUrl(path).data.publicUrl
@@ -38,6 +40,8 @@ const PRICE_LABELS: Record<string, { fr: string; en: string }> = {
 export default function ExploreScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
+  const colors = useThemeColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   // Params passed from Home screen when tapping a category or zone shortcut
   const { categoryId: paramCategoryId, zoneId: paramZoneId } = useLocalSearchParams<{
@@ -136,17 +140,17 @@ export default function ExploreScreen() {
 
           {/* Search */}
           <View style={styles.searchRow}>
-            <Ionicons name="search" size={18} color="#8E8E93" />
+            <Ionicons name="search" size={18} color={colors.textSecondary} />
             <TextInput
               style={styles.searchInput}
               placeholder={t('explore.searchPlaceholder')}
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor={colors.textPlaceholder}
               value={search}
               onChangeText={setSearch}
             />
             {search.length > 0 && (
               <Pressable onPress={() => setSearch('')}>
-                <Ionicons name="close-circle" size={18} color="#8E8E93" />
+                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
               </Pressable>
             )}
           </View>
@@ -157,7 +161,7 @@ export default function ExploreScreen() {
               style={[styles.chip, openNow && styles.chipActive]}
               onPress={() => setOpenNow(o => !o)}
             >
-              <Ionicons name="time-outline" size={12} color={openNow ? '#fff' : '#8E8E93'} />
+              <Ionicons name="time-outline" size={12} color={openNow ? '#fff' : colors.textSecondary} />
               <Text style={[styles.chipText, openNow && styles.chipTextActive]}>
                 {lang === 'fr' ? 'Ouvert maintenant' : 'Open now'}
               </Text>
@@ -168,8 +172,8 @@ export default function ExploreScreen() {
               disabled={locationLoading}
             >
               {locationLoading
-                ? <ActivityIndicator size={12} color="#8E8E93" />
-                : <Ionicons name="navigate-outline" size={12} color={nearMe ? '#fff' : '#8E8E93'} />
+                ? <ActivityIndicator size={12} color={colors.textSecondary} />
+                : <Ionicons name="navigate-outline" size={12} color={nearMe ? '#fff' : colors.textSecondary} />
               }
               <Text style={[styles.chipText, nearMe && styles.chipTextActive]}>
                 {lang === 'fr' ? 'Près de moi' : 'Near me'}
@@ -215,7 +219,7 @@ export default function ExploreScreen() {
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => toggleZone(zone.id)}
                 >
-                  <Ionicons name="location-outline" size={12} color={active ? '#fff' : '#8E8E93'} />
+                  <Ionicons name="location-outline" size={12} color={active ? '#fff' : colors.textSecondary} />
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>{zone.name}</Text>
                 </Pressable>
               )
@@ -230,7 +234,7 @@ export default function ExploreScreen() {
           </View>
         ) : filtered.length === 0 ? (
           <View style={styles.center}>
-            <Ionicons name="search-outline" size={48} color="rgba(0,0,0,0.2)" />
+            <Ionicons name="search-outline" size={48} color={colors.iconMuted} />
             <Text style={styles.emptyText}>{t('explore.noResults')}</Text>
             <Text style={styles.emptyHint}>{t('explore.noResultsHint')}</Text>
           </View>
@@ -291,7 +295,7 @@ export default function ExploreScreen() {
                       </View>
                     )}
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} />
                 </Pressable>
               )
             }}
@@ -302,165 +306,167 @@ export default function ExploreScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  header: {
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    paddingHorizontal: 24,
-    marginBottom: 14,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 24,
-    marginBottom: 12,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-    paddingHorizontal: 14,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#1C1C1E',
-  },
-  chipsScroll: {
-    marginBottom: 6,
-  },
-  chipsContent: {
-    paddingHorizontal: 24,
-    gap: 8,
-    paddingBottom: 2,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.65)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-  },
-  chipActive: {
-    backgroundColor: '#E8571A',
-    borderColor: '#E8571A',
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#3C3C43',
-  },
-  chipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: 'rgba(0,0,0,0.4)',
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: 'rgba(0,0,0,0.3)',
-  },
-  list: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 100,
-    gap: 10,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-  },
-  cardThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(200,200,210,0.3)',
-  },
-  photoFallback: {
-    backgroundColor: 'rgba(200,200,210,0.4)',
-  },
-  cardBody: {
-    flex: 1,
-    gap: 3,
-  },
-  cardName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-  cardSub: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-  priceTag: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(232,87,26,0.1)',
-  },
-  priceTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#E8571A',
-  },
-  openBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  openBadgeOpen:   { backgroundColor: 'rgba(52,199,89,0.12)' },
-  openBadgeClosed: { backgroundColor: 'rgba(255,59,48,0.1)' },
-  openBadgeText:       { fontSize: 11, fontWeight: '600' },
-  openBadgeTextOpen:   { color: '#34C759' },
-  openBadgeTextClosed: { color: '#FF3B30' },
-  distTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,122,255,0.08)',
-  },
-  distTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-})
+function createStyles(c: ThemeColors) {
+  return StyleSheet.create({
+    header: {
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: c.textPrimary,
+      paddingHorizontal: 24,
+      marginBottom: 14,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: 24,
+      marginBottom: 12,
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: c.inputBg,
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      paddingHorizontal: 14,
+      gap: 8,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 15,
+      color: c.inputText,
+    },
+    chipsScroll: {
+      marginBottom: 6,
+    },
+    chipsContent: {
+      paddingHorizontal: 24,
+      gap: 8,
+      paddingBottom: 2,
+    },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.surfaceBorder,
+    },
+    chipActive: {
+      backgroundColor: '#E8571A',
+      borderColor: '#E8571A',
+    },
+    chipText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: c.textSecondary,
+    },
+    chipTextActive: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    emptyText: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: c.textTertiary,
+    },
+    emptyHint: {
+      fontSize: 14,
+      color: c.textSecondary,
+    },
+    list: {
+      paddingHorizontal: 24,
+      paddingTop: 8,
+      paddingBottom: 100,
+      gap: 10,
+    },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.surfaceBorder,
+      gap: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+    },
+    cardThumb: {
+      width: 72,
+      height: 72,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: c.thumbFallback,
+    },
+    photoFallback: {
+      backgroundColor: c.thumbFallback,
+    },
+    cardBody: {
+      flex: 1,
+      gap: 3,
+    },
+    cardName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: c.textPrimary,
+    },
+    cardSub: {
+      fontSize: 13,
+      color: c.textSecondary,
+    },
+    priceTag: {
+      alignSelf: 'flex-start',
+      marginTop: 2,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 8,
+      backgroundColor: 'rgba(232,87,26,0.1)',
+    },
+    priceTagText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#E8571A',
+    },
+    openBadge: {
+      alignSelf: 'flex-start',
+      marginTop: 2,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 8,
+    },
+    openBadgeOpen:   { backgroundColor: 'rgba(52,199,89,0.12)' },
+    openBadgeClosed: { backgroundColor: 'rgba(255,59,48,0.1)' },
+    openBadgeText:       { fontSize: 11, fontWeight: '600' },
+    openBadgeTextOpen:   { color: '#34C759' },
+    openBadgeTextClosed: { color: '#FF3B30' },
+    distTag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      alignSelf: 'flex-start',
+      marginTop: 2,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 8,
+      backgroundColor: 'rgba(0,122,255,0.08)',
+    },
+    distTagText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#007AFF',
+    },
+  })
+}

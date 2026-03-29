@@ -53,10 +53,11 @@ export interface Database {
           subcategory_id: string | null
           is_active: boolean
           is_deleted: boolean
+          owner_id: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['places']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['places']['Row'], 'id' | 'created_at' | 'updated_at' | 'owner_id'> & { owner_id?: string | null }
         Update: Partial<Database['public']['Tables']['places']['Insert']>
         Relationships: []
       }
@@ -67,6 +68,7 @@ export interface Database {
           storage_path: string
           is_primary: boolean
           is_deleted: boolean
+          is_menu: boolean
           position: number
           created_at: string
         }
@@ -80,10 +82,13 @@ export interface Database {
           full_name: string | null
           avatar_url: string | null
           is_admin: boolean
+          role: 'user' | 'restaurant_owner' | 'admin'
+          preferred_zones: string[]
+          preferred_vibes: string[]
           created_at: string
         }
         Insert: Pick<Database['public']['Tables']['profiles']['Row'], 'id'>
-        Update: Partial<Pick<Database['public']['Tables']['profiles']['Row'], 'full_name' | 'avatar_url' | 'is_admin'>>
+        Update: Partial<Pick<Database['public']['Tables']['profiles']['Row'], 'full_name' | 'avatar_url' | 'is_admin' | 'role' | 'preferred_zones' | 'preferred_vibes'>>
         Relationships: []
       }
       favorites: {
@@ -136,6 +141,20 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['reviews']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Pick<Database['public']['Tables']['reviews']['Row'], 'rating' | 'comment'>>
+        Relationships: []
+      }
+      videos: {
+        Row: {
+          id: string
+          place_id: string
+          storage_path: string
+          thumbnail_url: string | null
+          caption: string | null
+          position: number
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['videos']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['videos']['Insert']>
         Relationships: []
       }
     }

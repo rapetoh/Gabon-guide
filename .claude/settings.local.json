@@ -12,7 +12,13 @@
       "Bash(rm \"c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/admin/place/PlaceForm.tsx\")",
       "Bash(find 'c:/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/supabase' -name *.sql)",
       "Bash(xargs grep:*)",
-      "Bash(npx expo:*)"
+      "Bash(npx expo:*)",
+      "Read(//c/Users/rapetoh/Downloads/**)",
+      "Bash(find /c/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/web/app -type f \\\\\\(-name *.ts -o -name *.tsx \\\\\\))",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(node_modules/typescript/bin/tsc --noEmit)"
     ]
   }
 }
