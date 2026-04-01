@@ -840,16 +840,119 @@ All fields + full validation parity with mobile PlaceForm:
 
 ---
 
+### 7.7 Auth Improvements ✅ IMPLEMENTED (2026-03-31)
+
+**Goal:** Harden the login/register screen and add forgot password.
+
+- [x] **Forgot password** — "Forgot password?" link calls `supabase.auth.resetPasswordForEmail()` with `redirectTo: 'okili://reset-password'`; shows success alert in FR/EN
+- [x] **Email format validation** — client-side regex check before attempting signUp/signIn; shows friendly error if malformed
+- [x] **Email verification detection** — after `signUp()`, if `data.session === null` the account needs email verification; shows "Check your email" alert instead of navigating to home
+- [x] **Post-login redirect** — login screen reads `redirect` param from URL; after any successful auth it calls `router.replace(redirect)` instead of always going to `/(tabs)`; used so tapping Save or leaving a review while logged out lands back on the same place after login
+- [x] i18n keys added for all new auth states: `fillAllFields`, `invalidEmail`, `checkEmail`, `resetSent`, `enterEmailFirst`
+
+**QA tests:**
+- [ ] Enter bad email format → "Invalid email" error shown before any network call
+- [ ] Register with valid email → "Check your email" alert appears (no navigation yet)
+- [ ] Tap "Forgot password?" with email pre-filled → success alert; reset email arrives
+- [ ] Tap "Forgot password?" with empty email → "Enter your email first" error
+- [ ] Tap Save (logged out) → redirected to login → log in → lands back on the place detail
+
+---
+
+### 7.8 Video Feed UX Refinements ✅ IMPLEMENTED (2026-03-31)
+
+**Goal:** Correct the most obvious UX gaps in the feed cards.
+
+- [x] **Tap to pause/resume** — `VideoFeedCard` now has a full-screen `Pressable` overlay (above scrim, below all UI buttons) that toggles play/pause; a large play/pause icon flashes briefly in the centre for feedback; scrolling away resets the pause state so the next scroll-in auto-plays
+- [x] **Pause on navigate away** — `index.tsx` uses `useFocusEffect` to set `isScreenFocused`; all feed cards receive `isActive={index === activeIndex && isScreenFocused}`, so video stops the moment the user opens a place detail or switches tabs
+- [x] **Scrim gradient** — replaced solid dark `View` (which created a hard horizontal line ~40% from top) with `expo-linear-gradient` starting at 30% opacity 0 → opacity 0.78 at bottom; no visible edge
+- [x] **Feed scroll-to-top on filter change** — all filter chips/tabs call `applyFilter()` which resets `activeIndex` to 0 and calls `feedRef.current?.scrollToOffset({ offset: 0, animated: false })`
+
+**QA tests:**
+- [ ] Tap centre of a playing video → video pauses; icon flashes
+- [ ] Tap again → video resumes
+- [ ] Tap "View place" from feed → navigate to detail → video in feed has stopped
+- [ ] Return to feed → active card resumes playing
+- [ ] Switch to Map tab → video stops; switch back → resumes
+- [ ] Tap a filter chip → feed scrolls to top immediately
+
+---
+
+### 7.9 RLS & Video Upload Bug Fixes ✅ IMPLEMENTED (2026-03-31)
+
+**Goal:** Fix "new row violates row-level security policy" errors and 0-byte video uploads.
+
+- [x] **Migration 012** (`supabase/migrations/012_fix_videos_rls.sql`) — The original admin/owner policies on `public.videos` used `FOR ALL … USING(…)` with no `WITH CHECK` clause; PostgreSQL requires `WITH CHECK` to authorise `INSERT`. Both policies dropped and recreated with both clauses.
+- [x] **Migration 013** (`supabase/migrations/013_place_videos_storage_policies.sql`) — The `place-videos` Storage bucket was created with no policies; every `INSERT` into `storage.objects` was blocked by RLS. Added public read + admin upload/update/delete + restaurant-owner upload/delete (path-scoped to their place); also added missing restaurant-owner photo policies for `place-photos`.
+- [x] **iOS video upload fix** — `fetch(localUri).blob()` and `XMLHttpRequest` both produce 0-byte blobs for iOS photo library URIs. Fixed in both `PlaceForm.tsx` and `restaurant-admin/edit.tsx` by replacing the Supabase JS client upload with `FileSystem.uploadAsync` (from `expo-file-system/legacy`) with `uploadType: BINARY_CONTENT` and a manual `Authorization: Bearer {token}` header. This performs a native-layer HTTP POST that correctly reads the local file.
+
+**QA tests:**
+- [ ] Admin uploads a video → storage file is non-zero bytes; video plays in feed
+- [ ] Restaurant owner uploads a video → same result
+- [ ] Admin inserts a `videos` row → succeeds (no RLS error)
+- [ ] Restaurant owner inserts a `videos` row for their own place → succeeds
+- [ ] Restaurant owner cannot insert a row for another place → blocked by RLS
+
+---
+
+### 7.10 Place Detail — Photo & Menu Viewer ✅ IMPLEMENTED (2026-03-31)
+
+**Goal:** All photos on the restaurant detail page are tappable and zoomable.
+
+- [x] **Gallery photos** — `<View>` wrappers replaced with `<Pressable>`; tap any photo → `Modal` (fade animation) with `ScrollView maximumZoomScale={4}` for native pinch-to-zoom; prev/next arrows; photo counter (`1 / N`); "Pinch to zoom" hint at bottom; expand icon on each thumbnail
+- [x] **Menu photos** — same viewer pattern; thumbnails in the horizontal menu strip are now `Pressable`; same `Modal` + zoomable `ScrollView`
+- [x] State: `photoViewerIndex` and `menuViewerIndex` (separate) both reset to `null` on close; no stale viewer state between opens
+
+**QA tests:**
+- [ ] Tap a gallery photo → full-screen modal opens
+- [ ] Pinch to zoom → image zooms up to 4×; can pan while zoomed
+- [ ] Tap anywhere outside image → modal closes
+- [ ] Prev/next arrows navigate between gallery photos
+- [ ] Tap a menu thumbnail on the detail page → full-screen modal opens
+- [ ] Same zoom and navigation works for menu photos
+
+---
+
+### 7.11 MenuBottomSheet Redesign ✅ IMPLEMENTED (2026-03-31)
+
+**Goal:** Fix the three bugs in the menu bottom sheet and add standard drag-to-dismiss.
+
+**Root causes fixed:**
+- Fragment + second `Modal` (photo viewer was a separate `Modal` outside the sheet `Modal`) caused broken touch dispatch and stale viewer state that blocked re-open
+- `viewerIndex` was never reset when the sheet closed, leaving a phantom `Modal` open
+
+**Changes:**
+- [x] **Single-Modal design** — entire sheet + viewer live inside one `<Modal>`; photo viewer rendered as an absolutely-positioned `View` overlay inside the same modal; no React Fragment, no second modal
+- [x] **Drag-to-dismiss** — `PanResponder` on the handle + header area; drag down > 100 px or flick velocity > 0.8 → sheet animates down to `SHEET_HEIGHT` then calls `onClose`; not far enough → spring snaps back; `Animated.add(slideAnim, dragY)` combines open/close animation with drag offset
+- [x] **Pinch-to-zoom viewer** — photo viewer uses `ScrollView` with `maximumZoomScale={4}`, `centerContent`, `bouncesZoom`; same pattern as place detail viewer
+- [x] **State reset** — `useEffect` resets `viewerIndex` to `null` when `visible` becomes `false`
+
+**QA tests:**
+- [ ] Open menu sheet → grab handle and drag down slowly → sheet follows finger
+- [ ] Release after dragging > 100 px → sheet closes
+- [ ] Release after dragging < 100 px → sheet snaps back open
+- [ ] Flick down quickly → sheet closes even if < 100 px
+- [ ] Close and re-open → sheet re-opens correctly (no phantom state)
+- [ ] Tap a photo → full-screen viewer opens
+- [ ] Pinch to zoom in viewer → zooms up to 4×
+- [ ] Tap X or outside → viewer closes; sheet still visible
+
+---
+
 ### Phase 7 — QA Gate (run before marking Phase 7 complete)
 
 - [ ] Share: share sheet appears + correct content + analytics fires
 - [ ] Maps choice: all 4 map tests pass
 - [ ] Menu photos: all 4 menu tests pass
-- [ ] Onboarding: all 6 onboarding tests pass
-- [ ] Restaurant owner role: all 6 role tests pass
-- [ ] Video feed: all 18 video QA tests pass (see 7.6 above)
-- [ ] No regressions: favorites, map, place detail, admin — all still work
-- [ ] TypeScript: `npx tsc --noEmit` → 0 errors
+- [ ] Onboarding: all 6 onboarding tests pass *(not yet built)*
+- [ ] Restaurant owner role: all 10 role + user-management tests pass
+- [ ] Video feed: all 6 video QA tests (7.6) + all 6 refinement tests (7.8) pass
+- [ ] Auth improvements: all 5 auth QA tests (7.7) pass
+- [ ] RLS/upload: all 5 upload QA tests (7.9) pass
+- [ ] Place detail viewer: all 6 photo viewer tests (7.10) pass
+- [ ] MenuBottomSheet: all 8 drag/zoom tests (7.11) pass
+- [ ] No regressions: favorites, map, explore, admin — all still work
+- [ ] TypeScript: `npx tsc --noEmit` → 0 errors ✅ (passing as of 2026-03-31)
 
 ---
 

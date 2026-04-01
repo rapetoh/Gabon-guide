@@ -1,9 +1,10 @@
 /**
  * MenuBottomSheet — slides up from the bottom of the video feed card.
  *
- * Fetches and displays all menu photos for a place.
- * Tapping a photo opens it full-screen.
- * Same slide animation pattern as ReviewsBottomSheet.
+ * - Drag the handle (or header) downward to dismiss
+ * - Tap a photo to open full-screen viewer
+ * - Pinch to zoom inside the viewer
+ * - Single-Modal design — no fragment, no nested modal
  */
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
@@ -12,6 +13,7 @@ import {
   Animated,
   Dimensions,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,7 +28,8 @@ import { supabase } from '../lib/supabase'
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window')
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.82
-const PHOTO_SIZE = (SCREEN_WIDTH - 20 * 2 - 8) / 2  // 2-column grid with gap
+const DISMISS_THRESHOLD = 100   // px dragged down before auto-dismiss
+const PHOTO_SIZE = (SCREEN_WIDTH - 20 * 2 - 8) / 2
 
 interface Props {
   placeId: string
@@ -67,10 +70,14 @@ export default function MenuBottomSheet({ placeId, placeName, visible, onClose, 
   const insets = useSafeAreaInsets()
   const { data: photos, isLoading } = useMenuPhotos(placeId, visible)
 
-  // Full-screen viewer state
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 
-  // Slide animation
+  // Reset viewer when sheet closes
+  useEffect(() => {
+    if (!visible) setViewerIndex(null)
+  }, [visible])
+
+  // ── Slide open/close animation ────────────────────────────────────────────
   const slideAnim = useRef(new Animated.Value(SHEET_HEIGHT)).current
 
   useEffect(() => {
@@ -89,30 +96,68 @@ export default function MenuBottomSheet({ placeId, placeName, visible, onClose, 
     }
   }, [visible, slideAnim])
 
+  // ── Drag-to-dismiss ───────────────────────────────────────────────────────
+  const dragY = useRef(new Animated.Value(0)).current
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // Only claim the gesture if the user is dragging downward
+      onMoveShouldSetPanResponder: (_, { dy, dx }) => dy > 8 && Math.abs(dy) > Math.abs(dx),
+      onPanResponderMove: (_, { dy }) => {
+        // Only allow downward drag
+        if (dy > 0) dragY.setValue(dy)
+      },
+      onPanResponderRelease: (_, { dy, vy }) => {
+        if (dy > DISMISS_THRESHOLD || vy > 0.8) {
+          // Flick/drag far enough — animate the rest of the way down then close
+          Animated.timing(dragY, {
+            toValue: SHEET_HEIGHT,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            dragY.setValue(0)
+            onClose()
+          })
+        } else {
+          // Not far enough — snap back
+          Animated.spring(dragY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+          }).start()
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start()
+      },
+    })
+  ).current
+
   return (
-    <>
-      {/* ── Bottom sheet ── */}
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        onRequestClose={onClose}
-        statusBarTranslucent
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      {/* Backdrop — tap outside the sheet to close */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+
+      {/* Sheet — rendered after backdrop so it sits on top */}
+      <Animated.View
+        style={[
+          styles.sheet,
+          { paddingBottom: insets.bottom + 8 },
+          { transform: [{ translateY: Animated.add(slideAnim, dragY) }] },
+        ]}
       >
-        {/* Backdrop */}
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        {/* ── Draggable handle + header ── */}
+        <View {...panResponder.panHandlers}>
+          <View style={styles.handleWrap}>
+            <View style={styles.handle} />
+          </View>
 
-        <Animated.View
-          style={[
-            styles.sheet,
-            { paddingBottom: insets.bottom + 8 },
-            { transform: [{ translateY: slideAnim }] },
-          ]}
-        >
-          {/* Handle */}
-          <View style={styles.handle} />
-
-          {/* Header */}
           <View style={styles.sheetHeader}>
             <View>
               <Text style={styles.sheetTitle} numberOfLines={1}>{placeName}</Text>
@@ -122,101 +167,125 @@ export default function MenuBottomSheet({ placeId, placeName, visible, onClose, 
               <Ionicons name="close" size={22} color="#8E8E93" />
             </Pressable>
           </View>
+        </View>
 
-          {/* Content */}
-          {isLoading ? (
-            <View style={styles.center}>
-              <ActivityIndicator color="#E8571A" />
-            </View>
-          ) : !photos || photos.length === 0 ? (
-            <View style={styles.center}>
-              <Ionicons name="receipt-outline" size={40} color="rgba(255,255,255,0.2)" />
-              <Text style={styles.emptyText}>
-                {lang === 'fr' ? 'Aucune photo de menu disponible.' : 'No menu photos available.'}
-              </Text>
-            </View>
-          ) : (
-            <ScrollView
-              contentContainerStyle={styles.grid}
-              showsVerticalScrollIndicator={false}
-            >
-              {photos.map((photo, index) => (
-                <Pressable
-                  key={photo.id}
-                  style={styles.photoCell}
-                  onPress={() => setViewerIndex(index)}
-                >
-                  <Image
-                    source={{ uri: getPhotoUrl(photo.storage_path) }}
-                    style={styles.photo}
-                    contentFit="cover"
-                    transition={200}
-                  />
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
-        </Animated.View>
-      </Modal>
+        {/* ── Content ── */}
+        {isLoading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color="#E8571A" />
+          </View>
+        ) : !photos || photos.length === 0 ? (
+          <View style={styles.center}>
+            <Ionicons name="receipt-outline" size={40} color="rgba(255,255,255,0.2)" />
+            <Text style={styles.emptyText}>
+              {lang === 'fr' ? 'Aucune photo de menu disponible.' : 'No menu photos available.'}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.grid}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {photos.map((photo, index) => (
+              <Pressable
+                key={photo.id}
+                style={styles.photoCell}
+                onPress={() => setViewerIndex(index)}
+              >
+                <Image
+                  source={{ uri: getPhotoUrl(photo.storage_path) }}
+                  style={styles.photo}
+                  contentFit="cover"
+                  transition={200}
+                />
+                <View style={styles.zoomHint}>
+                  <Ionicons name="expand-outline" size={14} color="rgba(255,255,255,0.7)" />
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+      </Animated.View>
 
-      {/* ── Full-screen photo viewer ── */}
+      {/* ── Full-screen viewer (inside same Modal) ── */}
       {viewerIndex !== null && photos && photos[viewerIndex] && (
-        <Modal
-          visible
-          transparent
-          animationType="fade"
-          onRequestClose={() => setViewerIndex(null)}
-          statusBarTranslucent
-        >
-          <Pressable style={styles.viewerBackdrop} onPress={() => setViewerIndex(null)}>
+        <View style={styles.viewer}>
+          {/* Close viewer on tap outside image */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setViewerIndex(null)} />
+
+          {/* Zoomable image via ScrollView */}
+          <ScrollView
+            style={styles.viewerScroll}
+            contentContainerStyle={styles.viewerScrollContent}
+            maximumZoomScale={4}
+            minimumZoomScale={1}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            centerContent
+            bouncesZoom
+          >
             <Image
               source={{ uri: getPhotoUrl(photos[viewerIndex].storage_path) }}
               style={styles.viewerImage}
               contentFit="contain"
             />
-            {/* Navigation arrows */}
-            {viewerIndex > 0 && (
-              <Pressable
-                style={[styles.viewerArrow, styles.viewerArrowLeft]}
-                onPress={e => { e.stopPropagation(); setViewerIndex(viewerIndex - 1) }}
-                hitSlop={16}
-              >
-                <Ionicons name="chevron-back" size={28} color="#fff" />
-              </Pressable>
-            )}
-            {viewerIndex < photos.length - 1 && (
-              <Pressable
-                style={[styles.viewerArrow, styles.viewerArrowRight]}
-                onPress={e => { e.stopPropagation(); setViewerIndex(viewerIndex + 1) }}
-                hitSlop={16}
-              >
-                <Ionicons name="chevron-forward" size={28} color="#fff" />
-              </Pressable>
-            )}
-            {/* Counter */}
-            <View style={[styles.viewerCounter, { top: insets.top + 16 }]}>
-              <Text style={styles.viewerCounterText}>
-                {viewerIndex + 1} / {photos.length}
-              </Text>
-            </View>
-            {/* Close */}
+          </ScrollView>
+
+          {/* Prev */}
+          {viewerIndex > 0 && (
             <Pressable
-              style={[styles.viewerClose, { top: insets.top + 12 }]}
-              onPress={() => setViewerIndex(null)}
-              hitSlop={12}
+              style={[styles.viewerArrow, styles.viewerArrowLeft]}
+              onPress={() => setViewerIndex(viewerIndex - 1)}
+              hitSlop={20}
             >
-              <Ionicons name="close" size={24} color="#fff" />
+              <Ionicons name="chevron-back" size={28} color="#fff" />
             </Pressable>
+          )}
+
+          {/* Next */}
+          {viewerIndex < photos.length - 1 && (
+            <Pressable
+              style={[styles.viewerArrow, styles.viewerArrowRight]}
+              onPress={() => setViewerIndex(viewerIndex + 1)}
+              hitSlop={20}
+            >
+              <Ionicons name="chevron-forward" size={28} color="#fff" />
+            </Pressable>
+          )}
+
+          {/* Counter */}
+          <View style={[styles.viewerCounter, { top: insets.top + 16 }]}>
+            <Text style={styles.viewerCounterText}>
+              {viewerIndex + 1} / {photos.length}
+            </Text>
+          </View>
+
+          {/* Close */}
+          <Pressable
+            style={[styles.viewerClose, { top: insets.top + 12 }]}
+            onPress={() => setViewerIndex(null)}
+            hitSlop={16}
+          >
+            <Ionicons name="close" size={24} color="#fff" />
           </Pressable>
-        </Modal>
+
+          {/* Zoom hint (first open only) */}
+          <View style={[styles.zoomHintBar, { bottom: insets.bottom + 16 }]}>
+            <Ionicons name="search-outline" size={13} color="rgba(255,255,255,0.5)" />
+            <Text style={styles.zoomHintText}>
+              {lang === 'fr' ? 'Pincez pour zoomer' : 'Pinch to zoom'}
+            </Text>
+          </View>
+        </View>
       )}
-    </>
+    </Modal>
   )
 }
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   sheet: {
@@ -229,21 +298,23 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
+  handleWrap: {
+    paddingTop: 10,
+    paddingBottom: 6,
+    alignItems: 'center',
+  },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 4,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
@@ -290,16 +361,33 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  // Full-screen viewer
-  viewerBackdrop: {
-    flex: 1,
+  zoomHint: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 6,
+    padding: 3,
+  },
+  // Viewer
+  viewer: {
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewerScroll: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.78,
+  },
+  viewerScrollContent: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   viewerImage: {
     width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.75,
+    height: SCREEN_HEIGHT * 0.78,
   },
   viewerArrow: {
     position: 'absolute',
@@ -329,5 +417,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     borderRadius: 20,
     padding: 6,
+  },
+  zoomHintBar: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  zoomHintText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
   },
 })

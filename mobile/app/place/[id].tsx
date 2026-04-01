@@ -84,6 +84,8 @@ export default function PlaceDetailScreen() {
   const [reviewFormOpen, setReviewFormOpen] = useState(false)
   const [reviewRating, setReviewRating] = useState(0)
   const [reviewComment, setReviewComment] = useState('')
+  const [menuViewerIndex, setMenuViewerIndex] = useState<number | null>(null)
+  const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null)
   const [hoursOpen, setHoursOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
   const [mapsSheetOpen, setMapsSheetOpen] = useState(false)
@@ -600,24 +602,86 @@ export default function PlaceDetailScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Photos' : 'Photos'}</Text>
-                {photos.length > 3 && (
-                  <Pressable>
-                    <Text style={styles.seeAll}>{lang === 'fr' ? 'Voir tout' : 'See all'}</Text>
-                  </Pressable>
-                )}
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                 {photos.map((ph: any, idx: number) => (
-                  <View key={ph.id ?? idx} style={styles.photoThumb}>
+                  <Pressable key={ph.id ?? idx} style={styles.photoThumb} onPress={() => setPhotoViewerIndex(idx)}>
                     <Image
                       source={{ uri: photoUrl(ph.storage_path) }}
                       style={StyleSheet.absoluteFill}
                       contentFit="cover"
                     />
-                  </View>
+                    <View style={styles.menuZoomHint}>
+                      <Ionicons name="expand-outline" size={14} color="rgba(255,255,255,0.8)" />
+                    </View>
+                  </Pressable>
                 ))}
               </ScrollView>
             </View>
+          )}
+
+          {/* ── Photo viewer ── */}
+          {photoViewerIndex !== null && photos[photoViewerIndex] && (
+            <Modal
+              visible
+              transparent
+              animationType="fade"
+              onRequestClose={() => setPhotoViewerIndex(null)}
+              statusBarTranslucent
+            >
+              <View style={styles.menuViewer}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={() => setPhotoViewerIndex(null)} />
+                <ScrollView
+                  style={{ width, height: '80%' }}
+                  contentContainerStyle={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+                  maximumZoomScale={4}
+                  minimumZoomScale={1}
+                  showsHorizontalScrollIndicator={false}
+                  showsVerticalScrollIndicator={false}
+                  centerContent
+                  bouncesZoom
+                >
+                  <Image
+                    source={{ uri: photoUrl(photos[photoViewerIndex].storage_path) }}
+                    style={{ width, height: '100%' }}
+                    contentFit="contain"
+                  />
+                </ScrollView>
+                {photoViewerIndex > 0 && (
+                  <Pressable
+                    style={[styles.menuViewerArrow, { left: 16 }]}
+                    onPress={() => setPhotoViewerIndex(photoViewerIndex - 1)}
+                    hitSlop={20}
+                  >
+                    <Ionicons name="chevron-back" size={28} color="#fff" />
+                  </Pressable>
+                )}
+                {photoViewerIndex < photos.length - 1 && (
+                  <Pressable
+                    style={[styles.menuViewerArrow, { right: 16 }]}
+                    onPress={() => setPhotoViewerIndex(photoViewerIndex + 1)}
+                    hitSlop={20}
+                  >
+                    <Ionicons name="chevron-forward" size={28} color="#fff" />
+                  </Pressable>
+                )}
+                <Pressable
+                  style={[styles.menuViewerClose, { top: insets.top + 12 }]}
+                  onPress={() => setPhotoViewerIndex(null)}
+                  hitSlop={16}
+                >
+                  <Ionicons name="close" size={24} color="#fff" />
+                </Pressable>
+                <View style={[styles.menuViewerCounter, { top: insets.top + 16 }]}>
+                  <Text style={styles.menuViewerCounterText}>
+                    {photoViewerIndex + 1} / {photos.length}
+                  </Text>
+                </View>
+                <Text style={[styles.menuZoomHintText, { bottom: insets.bottom + 16 }]}>
+                  {lang === 'fr' ? 'Pincez pour zoomer' : 'Pinch to zoom'}
+                </Text>
+              </View>
+            </Modal>
           )}
 
           {/* ── Menu ── */}
@@ -626,16 +690,83 @@ export default function PlaceDetailScreen() {
               <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Menu' : 'Menu'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                 {menuPhotos.map((ph: any, idx: number) => (
-                  <View key={ph.id ?? idx} style={styles.menuThumb}>
+                  <Pressable key={ph.id ?? idx} style={styles.menuThumb} onPress={() => setMenuViewerIndex(idx)}>
                     <Image
                       source={{ uri: photoUrl(ph.storage_path) }}
                       style={StyleSheet.absoluteFill}
                       contentFit="cover"
                     />
-                  </View>
+                    <View style={styles.menuZoomHint}>
+                      <Ionicons name="expand-outline" size={14} color="rgba(255,255,255,0.8)" />
+                    </View>
+                  </Pressable>
                 ))}
               </ScrollView>
             </View>
+          )}
+
+          {/* ── Menu photo viewer ── */}
+          {menuViewerIndex !== null && menuPhotos[menuViewerIndex] && (
+            <Modal
+              visible
+              transparent
+              animationType="fade"
+              onRequestClose={() => setMenuViewerIndex(null)}
+              statusBarTranslucent
+            >
+              <View style={styles.menuViewer}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuViewerIndex(null)} />
+                <ScrollView
+                  style={{ width, height: '80%' }}
+                  contentContainerStyle={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+                  maximumZoomScale={4}
+                  minimumZoomScale={1}
+                  showsHorizontalScrollIndicator={false}
+                  showsVerticalScrollIndicator={false}
+                  centerContent
+                  bouncesZoom
+                >
+                  <Image
+                    source={{ uri: photoUrl(menuPhotos[menuViewerIndex].storage_path) }}
+                    style={{ width, height: '100%' }}
+                    contentFit="contain"
+                  />
+                </ScrollView>
+                {menuViewerIndex > 0 && (
+                  <Pressable
+                    style={[styles.menuViewerArrow, { left: 16 }]}
+                    onPress={() => setMenuViewerIndex(menuViewerIndex - 1)}
+                    hitSlop={20}
+                  >
+                    <Ionicons name="chevron-back" size={28} color="#fff" />
+                  </Pressable>
+                )}
+                {menuViewerIndex < menuPhotos.length - 1 && (
+                  <Pressable
+                    style={[styles.menuViewerArrow, { right: 16 }]}
+                    onPress={() => setMenuViewerIndex(menuViewerIndex + 1)}
+                    hitSlop={20}
+                  >
+                    <Ionicons name="chevron-forward" size={28} color="#fff" />
+                  </Pressable>
+                )}
+                <Pressable
+                  style={[styles.menuViewerClose, { top: insets.top + 12 }]}
+                  onPress={() => setMenuViewerIndex(null)}
+                  hitSlop={16}
+                >
+                  <Ionicons name="close" size={24} color="#fff" />
+                </Pressable>
+                <View style={[styles.menuViewerCounter, { top: insets.top + 16 }]}>
+                  <Text style={styles.menuViewerCounterText}>
+                    {menuViewerIndex + 1} / {menuPhotos.length}
+                  </Text>
+                </View>
+                <Text style={[styles.menuZoomHintText, { bottom: insets.bottom + 16 }]}>
+                  {lang === 'fr' ? 'Pincez pour zoomer' : 'Pinch to zoom'}
+                </Text>
+              </View>
+            </Modal>
           )}
 
           {/* ── Reviews ── */}
@@ -1218,6 +1349,53 @@ function createStyles(c: ThemeColors) {
     borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: c.thumbFallback,
+  },
+  menuZoomHint: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 6,
+    padding: 3,
+  },
+  menuViewer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuViewerArrow: {
+    position: 'absolute',
+    top: '50%',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  menuViewerClose: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 20,
+    padding: 6,
+  },
+  menuViewerCounter: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  menuViewerCounterText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  menuZoomHintText: {
+    position: 'absolute',
+    alignSelf: 'center',
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
   },
 
   // Reviews

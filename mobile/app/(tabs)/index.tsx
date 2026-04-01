@@ -3,7 +3,7 @@
  * with a floating filter header (categories + quick-filter chips).
  */
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -52,6 +52,15 @@ export default function HomeScreen() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [muted, setMuted] = useState(false)
   const feedRef = useRef<FlatList>(null)
+
+  // Pause all videos when navigating away from this tab/screen
+  const [isScreenFocused, setIsScreenFocused] = useState(true)
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true)
+      return () => setIsScreenFocused(false)
+    }, [])
+  )
 
   function applyFilter(fn: () => void) {
     fn()
@@ -128,7 +137,7 @@ export default function HomeScreen() {
           renderItem={({ item, index }) => (
             <VideoFeedCard
               item={item}
-              isActive={index === activeIndex}
+              isActive={index === activeIndex && isScreenFocused}
               isMuted={muted}
               onToggleMute={() => setMuted(m => !m)}
               lang={lang as 'fr' | 'en'}

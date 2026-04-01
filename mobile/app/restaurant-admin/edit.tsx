@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
+import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { router, useLocalSearchParams } from 'expo-router'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -195,12 +197,21 @@ export default function RestaurantAdminEdit() {
     setVideoUploading(true)
     try {
       const storagePath = `${id}/${uuidv4()}.mp4`
-      const response = await fetch(asset.uri)
-      const blob = await response.blob()
-      const { error: uploadError } = await supabase.storage
-        .from('place-videos')
-        .upload(storagePath, blob, { contentType: 'video/mp4' })
-      if (uploadError) throw uploadError
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+      const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/place-videos/${storagePath}`
+      const uploadResult = await FileSystem.uploadAsync(uploadUrl, asset.uri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'video/mp4',
+          'x-upsert': 'false',
+        },
+      })
+      if (uploadResult.status !== 200 && uploadResult.status !== 201) {
+        throw new Error(`Video upload failed (${uploadResult.status}): ${uploadResult.body}`)
+      }
       // Upload succeeded — now safe to delete old record
       if (existingVideo) {
         await supabase.from('videos').delete().eq('id', existingVideo.id)
@@ -208,6 +219,8 @@ export default function RestaurantAdminEdit() {
       await supabase.from('videos').insert({
         place_id: id,
         storage_path: storagePath,
+        thumbnail_url: null,
+        caption: null,
         position: 0,
       })
       refetchVideo()
@@ -342,20 +355,13 @@ export default function RestaurantAdminEdit() {
             {lang === 'fr' ? 'Vidéo' : 'Video'}
           </Text>
           {existingVideo ? (
-            <View style={[styles.videoCard, { backgroundColor: colors.surfaceElevated }]}>
-              <View style={styles.videoIconWrap}>
-                <Ionicons name="play-circle" size={32} color="#E8571A" />
-              </View>
-              <Text style={[styles.videoSavedText, { color: colors.textPrimary, flex: 1 }]}>
-                {lang === 'fr' ? 'Vidéo enregistrée' : 'Saved video'}
-              </Text>
-              <Pressable style={styles.videoBtn} onPress={pickVideo} disabled={videoUploading}>
-                <Ionicons name="swap-horizontal" size={16} color="#E8571A" />
-              </Pressable>
-              <Pressable style={[styles.videoBtn, { backgroundColor: 'rgba(255,59,48,0.1)' }]} onPress={deleteVideo} disabled={videoUploading}>
-                <Ionicons name="trash-outline" size={16} color="#FF3B30" />
-              </Pressable>
-            </View>
+            <OwnerVideoPreview
+              uri={supabase.storage.from('place-videos').getPublicUrl(existingVideo.storage_path).data.publicUrl}
+              lang={lang}
+              onReplace={pickVideo}
+              onRemove={deleteVideo}
+              disabled={videoUploading}
+            />
           ) : (
             <Pressable
               style={[styles.uploadBtn, { backgroundColor: colors.surfaceElevated }]}
@@ -442,6 +448,55 @@ export default function RestaurantAdminEdit() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  )
+}
+
+function OwnerVideoPreview({
+  uri, lang, onReplace, onRemove, disabled,
+}: {
+  uri: string
+  lang: 'fr' | 'en'
+  onReplace: () => void
+  onRemove: () => void
+  disabled?: boolean
+}) {
+  const player = useVideoPlayer(uri, p => {
+    p.loop = true
+    p.muted = true
+  })
+
+  return (
+    <View style={styles.videoPreviewWrap}>
+      <VideoView
+        player={player}
+        style={styles.videoPreviewView}
+        contentFit="cover"
+        nativeControls={false}
+      />
+      <Pressable
+        style={styles.videoPlayOverlay}
+        onPress={() => player.playing ? player.pause() : player.play()}
+      >
+        <Ionicons
+          name={player.playing ? 'pause-circle' : 'play-circle'}
+          size={44}
+          color="rgba(255,255,255,0.85)"
+        />
+      </Pressable>
+      <View style={styles.videoStatusBadge}>
+        <Text style={styles.videoStatusText}>
+          {lang === 'fr' ? 'Vidéo enregistrée' : 'Saved video'}
+        </Text>
+      </View>
+      <View style={styles.videoPreviewActions}>
+        <Pressable style={styles.videoBtn} onPress={onReplace} disabled={disabled}>
+          <Ionicons name="swap-horizontal" size={16} color="#E8571A" />
+        </Pressable>
+        <Pressable style={[styles.videoBtn, { backgroundColor: 'rgba(255,59,48,0.1)' }]} onPress={onRemove} disabled={disabled}>
+          <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+        </Pressable>
+      </View>
+    </View>
   )
 }
 
@@ -590,5 +645,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(232,87,26,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  videoPreviewWrap: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    aspectRatio: 9 / 16,
+  },
+  videoPreviewView: {
+    width: '100%',
+    height: '100%',
+  },
+  videoPlayOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoStatusBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  videoStatusText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  videoPreviewActions: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    gap: 8,
   },
 })

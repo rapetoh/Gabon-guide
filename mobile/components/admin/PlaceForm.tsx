@@ -5,6 +5,7 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -470,6 +471,28 @@ export function PlaceForm({ mode, placeId }: Props) {
     return true
   }
 
+  // Upload a local video file URI directly to Supabase storage using
+  // expo-file-system's native uploadAsync. This is the only approach that
+  // reliably handles iOS photo library URIs — fetch() and XHR both produce
+  // 0-byte blobs when used with the Supabase JS client in React Native.
+  async function uploadVideoNative(localUri: string, storagePath: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Not authenticated')
+    const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/place-videos/${storagePath}`
+    const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'video/mp4',
+        'x-upsert': 'false',
+      },
+    })
+    if (result.status !== 200 && result.status !== 201) {
+      throw new Error(`Video upload failed (${result.status}): ${result.body}`)
+    }
+  }
+
   async function handleSave() {
     if (!validate()) return
 
@@ -575,12 +598,7 @@ export function PlaceForm({ mode, placeId }: Props) {
       // --- Upload new video THEN delete old one (order matters — never lose existing on upload failure) ---
       if (video?.isNew) {
         const videoFileName = `${targetId}/${Date.now()}.mp4`
-        const videoResponse = await fetch(video.uri)
-        const videoBlob = await videoResponse.blob()
-        const { error: videoUploadError } = await supabase.storage
-          .from('place-videos')
-          .upload(videoFileName, videoBlob, { contentType: 'video/mp4', upsert: false })
-        if (videoUploadError) throw videoUploadError
+        await uploadVideoNative(video.uri, videoFileName)
         // Upload succeeded — now safe to delete old record
         if (deletedVideoId) {
           await supabase.from('videos').delete().eq('id', deletedVideoId)
@@ -1071,29 +1089,14 @@ export function PlaceForm({ mode, placeId }: Props) {
                 : 'One video per place — shown in the vertical feed. Accepted formats: MP4, MOV.'}
             </Text>
             {video ? (
-              <View style={styles.videoCard}>
-                <View style={styles.videoIconWrap}>
-                  <Ionicons name="play-circle" size={36} color="#fff" />
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.videoLabel}>
-                    {video.isNew
-                      ? (lang === 'fr' ? 'Nouvelle vidéo sélectionnée' : 'New video selected')
-                      : (lang === 'fr' ? 'Vidéo enregistrée' : 'Saved video')}
-                  </Text>
-                  {video.isNew && video.duration
-                    ? <Text style={styles.videoMeta}>{Math.round(video.duration)}s</Text>
-                    : null}
-                </View>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Pressable style={styles.videoActionBtn} onPress={pickVideo}>
-                    <Ionicons name="swap-horizontal" size={16} color="#E8571A" />
-                  </Pressable>
-                  <Pressable style={[styles.videoActionBtn, { backgroundColor: 'rgba(255,59,48,0.1)' }]} onPress={removeVideo}>
-                    <Ionicons name="trash-outline" size={16} color="#FF3B30" />
-                  </Pressable>
-                </View>
-              </View>
+              <VideoPreview
+                uri={video.uri}
+                isNew={video.isNew}
+                duration={video.duration}
+                lang={lang}
+                onReplace={pickVideo}
+                onRemove={removeVideo}
+              />
             ) : (
               <Pressable style={styles.addVideoBtn} onPress={pickVideo}>
                 <Ionicons name="videocam-outline" size={22} color="#8E8E93" />
@@ -1141,6 +1144,62 @@ export function PlaceForm({ mode, placeId }: Props) {
         </ScrollView>
       )}
     </SafeAreaView>
+  )
+}
+
+function VideoPreview({
+  uri, isNew, duration, lang, onReplace, onRemove,
+}: {
+  uri: string
+  isNew: boolean
+  duration?: number
+  lang: 'fr' | 'en'
+  onReplace: () => void
+  onRemove: () => void
+}) {
+  const player = useVideoPlayer(uri, p => {
+    p.loop = true
+    p.muted = true
+  })
+
+  return (
+    <View style={styles.videoPreviewWrap}>
+      <VideoView
+        player={player}
+        style={styles.videoPreview}
+        contentFit="cover"
+        nativeControls={false}
+      />
+      {/* Play/pause tap overlay */}
+      <Pressable
+        style={styles.videoPlayOverlay}
+        onPress={() => player.playing ? player.pause() : player.play()}
+      >
+        <Ionicons
+          name={player.playing ? 'pause-circle' : 'play-circle'}
+          size={44}
+          color="rgba(255,255,255,0.85)"
+        />
+      </Pressable>
+      {/* Status label */}
+      <View style={styles.videoStatusBadge}>
+        <Text style={styles.videoStatusText}>
+          {isNew
+            ? (lang === 'fr' ? 'Nouvelle vidéo' : 'New video')
+            : (lang === 'fr' ? 'Vidéo enregistrée' : 'Saved video')}
+          {isNew && duration ? `  •  ${Math.round(duration)}s` : ''}
+        </Text>
+      </View>
+      {/* Actions */}
+      <View style={styles.videoPreviewActions}>
+        <Pressable style={styles.videoActionBtn} onPress={onReplace}>
+          <Ionicons name="swap-horizontal" size={16} color="#E8571A" />
+        </Pressable>
+        <Pressable style={[styles.videoActionBtn, { backgroundColor: 'rgba(255,59,48,0.1)' }]} onPress={onRemove}>
+          <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+        </Pressable>
+      </View>
+    </View>
   )
 }
 
@@ -1332,5 +1391,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7', borderRadius: 12,
     paddingHorizontal: 16, paddingVertical: 14,
     borderWidth: 1.5, borderColor: '#E5E5EA', borderStyle: 'dashed',
+  },
+  // Video preview
+  videoPreviewWrap: {
+    borderRadius: 12, overflow: 'hidden',
+    backgroundColor: '#000',
+    aspectRatio: 9 / 16,
+  },
+  videoPreview: {
+    width: '100%', height: '100%',
+  },
+  videoPlayOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  videoStatusBadge: {
+    position: 'absolute', top: 10, left: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 8,
+  },
+  videoStatusText: {
+    color: '#fff', fontSize: 12, fontWeight: '600',
+  },
+  videoPreviewActions: {
+    position: 'absolute', top: 10, right: 10,
+    flexDirection: 'row', gap: 8,
   },
 })

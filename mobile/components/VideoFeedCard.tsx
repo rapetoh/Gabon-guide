@@ -79,21 +79,44 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
     }
   })
 
+  // ── Tap-to-pause ─────────────────────────────────────────────────────────────
+  const [userPaused, setUserPaused] = useState(false)
+  const [flashIcon, setFlashIcon] = useState<'play' | 'pause'>('pause')
+  const playIconAnim = useRef(new Animated.Value(0)).current
+
+  function handleTapCenter() {
+    if (!videoSource) return
+    const next = !userPaused
+    setUserPaused(next)
+    setFlashIcon(next ? 'pause' : 'play')
+    playIconAnim.setValue(1)
+    Animated.timing(playIconAnim, {
+      toValue: 0,
+      duration: 700,
+      useNativeDriver: true,
+    }).start()
+  }
+
   // Sync mute
   useEffect(() => {
     if (videoSource && player) player.muted = isMuted
   }, [isMuted, player, videoSource])
 
-  // Play / pause on active change
+  // Play / pause on active change or user-initiated pause
   useEffect(() => {
     if (!videoSource || !player) return
-    if (isActive) {
+    if (isActive && !userPaused) {
       player.play()
     } else {
       player.pause()
-      player.currentTime = 0
+      if (!isActive) player.currentTime = 0
     }
-  }, [isActive, player, videoSource])
+  }, [isActive, userPaused, player, videoSource])
+
+  // Reset user-pause state when the card scrolls out of view
+  useEffect(() => {
+    if (!isActive) setUserPaused(false)
+  }, [isActive])
 
   const [reviewsOpen, setReviewsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -189,6 +212,15 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
         style={styles.scrim}
         pointerEvents="none"
       />
+
+      {/* ── Tap-to-pause (video only) — sits above scrim, below all UI controls ── */}
+      {videoSource && (
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleTapCenter}>
+          <Animated.View style={[styles.playPauseFlash, { opacity: playIconAnim }]}>
+            <Ionicons name={flashIcon === 'pause' ? 'pause' : 'play'} size={64} color="rgba(255,255,255,0.85)" />
+          </Animated.View>
+        </Pressable>
+      )}
 
       {/* ── Mute button (top-right, video only) ── */}
       {videoSource && (
@@ -318,6 +350,11 @@ const styles = StyleSheet.create({
   },
   noMediaFallback: {
     backgroundColor: '#1a1a1a',
+  },
+  playPauseFlash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Bottom-heavy scrim so text is readable over the media
   scrim: {
