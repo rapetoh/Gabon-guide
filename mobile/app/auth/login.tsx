@@ -1,6 +1,6 @@
 import * as AppleAuthentication from 'expo-apple-authentication'
 import * as WebBrowser from 'expo-web-browser'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -30,36 +30,102 @@ export default function LoginScreen() {
   const colors = useThemeColors()
   const styles = useMemo(() => createStyles(colors), [colors])
 
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>()
+
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
+
+  function navigateAfterAuth() {
+    if (redirect) {
+      router.replace(redirect as any)
+    } else {
+      router.replace('/(tabs)')
+    }
+  }
 
   // --- Email / Password ---
   async function handleEmailAuth() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert(t('errors.generic'))
+    const emailTrimmed = email.trim()
+    const passwordTrimmed = password.trim()
+
+    if (!emailTrimmed || !passwordTrimmed) {
+      Alert.alert(
+        t('errors.generic'),
+        t('auth.fillAllFields') ?? 'Please fill in all fields.'
+      )
+      return
+    }
+
+    // Basic email format check before hitting the server
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+      Alert.alert(
+        t('auth.invalidEmail') ?? 'Invalid email',
+        t('auth.invalidEmailHint') ?? 'Please enter a valid email address.'
+      )
       return
     }
 
     setLoading(true)
     try {
-      let error
       if (mode === 'register') {
-        ;({ error } = await supabase.auth.signUp({ email: email.trim(), password }))
+        const { data, error } = await supabase.auth.signUp({
+          email: emailTrimmed,
+          password: passwordTrimmed,
+          options: { data: { full_name: fullName.trim() || null } },
+        })
+        if (error) throw error
+
+        // Supabase requires email confirmation — user needs to verify before logging in
+        if (data.user && !data.session) {
+          Alert.alert(
+            t('auth.checkEmail') ?? 'Check your email',
+            t('auth.checkEmailHint') ?? `We sent a confirmation link to ${emailTrimmed}. Click it to activate your account.`
+          )
+          return
+        }
       } else {
-        ;({ error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }))
+        const { error } = await supabase.auth.signInWithPassword({
+          email: emailTrimmed,
+          password: passwordTrimmed,
+        })
+        if (error) throw error
       }
 
-      if (error) throw error
-      // Root layout's onAuthStateChange fires → session is set → navigate home
-      router.replace('/(tabs)')
+      // Root layout's onAuthStateChange fires → session is set → navigate back to context
+      navigateAfterAuth()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('errors.generic')
-      Alert.alert(message)
+      Alert.alert(t('errors.generic'), message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleForgotPassword() {
+    const emailTrimmed = email.trim()
+    if (!emailTrimmed) {
+      Alert.alert(
+        t('auth.forgotPassword') ?? 'Reset password',
+        t('auth.enterEmailFirst') ?? 'Enter your email address above, then tap "Forgot password".'
+      )
+      return
+    }
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(emailTrimmed, {
+        redirectTo: 'okili://reset-password',
+      })
+      if (error) throw error
+      Alert.alert(
+        t('auth.resetSent') ?? 'Email sent',
+        t('auth.resetSentHint') ?? `We sent a password reset link to ${emailTrimmed}.`
+      )
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('errors.generic')
+      Alert.alert(t('errors.generic'), message)
     } finally {
       setLoading(false)
     }
@@ -93,7 +159,7 @@ export default function LoginScreen() {
         if (!code) throw new Error('No code in OAuth callback URL')
         const { error: sessionError } = await supabase.auth.exchangeCodeForSession(code)
         if (sessionError) throw sessionError
-        router.replace('/(tabs)')
+        navigateAfterAuth()
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('errors.generic')
@@ -172,6 +238,18 @@ export default function LoginScreen() {
 
         {/* Email / Password form */}
         <View style={styles.form}>
+          {!isLogin && (
+            <TextInput
+              style={styles.input}
+              placeholder={t('auth.fullName') ?? 'Full name'}
+              placeholderTextColor={colors.textPlaceholder}
+              value={fullName}
+              onChangeText={setFullName}
+              autoCapitalize="words"
+              autoComplete="name"
+              textContentType="name"
+            />
+          )}
           <TextInput
             style={styles.input}
             placeholder={t('auth.email')}
@@ -195,7 +273,7 @@ export default function LoginScreen() {
           />
 
           {isLogin && (
-            <Pressable style={styles.forgotBtn}>
+            <Pressable style={styles.forgotBtn} onPress={handleForgotPassword} disabled={loading}>
               <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
             </Pressable>
           )}

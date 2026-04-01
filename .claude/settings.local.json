@@ -18,7 +18,16 @@
       "Skill(update-config)",
       "Skill(update-config:*)",
       "Bash(node_modules/.bin/tsc --noEmit)",
-      "Bash(node_modules/typescript/bin/tsc --noEmit)"
+      "Bash(node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(ls -la \"/c/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/\\(tabs\\)/\")",
+      "Bash(cat \"/c/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/\\(tabs\\)/index.tsx\")",
+      "Bash(cat \"/c/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/\\(tabs\\)/explore.tsx\")",
+      "Bash(cat \"/c/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/\\(tabs\\)/map.tsx\")",
+      "Bash(cat \"/c/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/\\(tabs\\)/profile.tsx\")",
+      "Bash(cat \"/c/Users/rapetoh/Downloads/Gabon Guide/Gabon-guide/mobile/app/\\(tabs\\)/favorites.tsx\")",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__apply_migration"
     ]
   }
 }

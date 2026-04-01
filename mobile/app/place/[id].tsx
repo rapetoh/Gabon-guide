@@ -320,7 +320,7 @@ export default function PlaceDetailScreen() {
 
   function handleSave() {
     if (!session) {
-      router.push('/auth/login')
+      router.push({ pathname: '/auth/login', params: { redirect: `/place/${id}` } })
       return
     }
     analytics.ctaSaveTapped(p.id, p.name, !saved)
@@ -656,7 +656,7 @@ export default function PlaceDetailScreen() {
 
             {/* Login prompt */}
             {!session && (
-              <Pressable style={styles.reviewLoginPrompt} onPress={() => router.push('/auth/login')}>
+              <Pressable style={styles.reviewLoginPrompt} onPress={() => router.push({ pathname: '/auth/login', params: { redirect: `/place/${id}` } })}>
                 <Ionicons name="star-outline" size={18} color="#E8571A" />
                 <Text style={styles.reviewLoginText}>
                   {lang === 'fr' ? 'Connectez-vous pour laisser un avis' : 'Log in to leave a review'}

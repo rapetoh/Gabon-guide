@@ -163,6 +163,15 @@ export default function ProfileScreen() {
               </Text>
               <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
             </Pressable>
+            <Pressable style={styles.row} onPress={() => router.push('/admin/users' as any)}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
+                <Ionicons name="people-outline" size={18} color="#E8571A" />
+              </View>
+              <Text style={styles.rowLabel}>
+                {lang === 'fr' ? 'Gérer les utilisateurs' : 'Manage Users'}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+            </Pressable>
           </View>
         )}
 

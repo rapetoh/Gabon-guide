@@ -81,13 +81,22 @@
     "continueWithGoogle": "Continue with Google",
     "continueWithApple": "Continue with Apple",
     "or": "or",
+    "fullName": "Full name",
     "email": "Email address",
     "password": "Password",
     "forgotPassword": "Forgot password?",
     "noAccount": "Don't have an account?",
     "alreadyAccount": "Already have an account?",
     "logout": "Log out",
-    "loginToSave": "Log in to save this place"
+    "loginToSave": "Log in to save this place",
+    "fillAllFields": "Please fill in all fields.",
+    "invalidEmail": "Invalid email",
+    "invalidEmailHint": "Please enter a valid email address.",
+    "checkEmail": "Check your email",
+    "checkEmailHint": "We sent a confirmation link to your address. Click it to activate your account.",
+    "resetSent": "Email sent",
+    "resetSentHint": "We sent a password reset link to your address.",
+    "enterEmailFirst": "Enter your email address above, then tap \"Forgot password\"."
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

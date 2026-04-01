@@ -81,13 +81,22 @@
     "continueWithGoogle": "Continuer avec Google",
     "continueWithApple": "Continuer avec Apple",
     "or": "ou",
+    "fullName": "Nom complet",
     "email": "Adresse email",
     "password": "Mot de passe",
     "forgotPassword": "Mot de passe oublié ?",
     "noAccount": "Pas encore de compte ?",
     "alreadyAccount": "Déjà un compte ?",
     "logout": "Se déconnecter",
-    "loginToSave": "Connectez-vous pour enregistrer ce lieu"
+    "loginToSave": "Connectez-vous pour enregistrer ce lieu",
+    "fillAllFields": "Veuillez remplir tous les champs.",
+    "invalidEmail": "Email invalide",
+    "invalidEmailHint": "Veuillez entrer une adresse email valide.",
+    "checkEmail": "Vérifiez votre email",
+    "checkEmailHint": "Nous avons envoyé un lien de confirmation à votre adresse. Cliquez dessus pour activer votre compte.",
+    "resetSent": "Email envoyé",
+    "resetSentHint": "Nous avons envoyé un lien de réinitialisation à votre adresse.",
+    "enterEmailFirst": "Entrez votre adresse email ci-dessus, puis appuyez sur \"Mot de passe oublié\"."
   },
   "errors": {
     "generic": "Une erreur est survenue. Veuillez réessayer.",

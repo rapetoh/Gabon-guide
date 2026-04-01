@@ -82,9 +82,14 @@ export default function AdminDashboardScreen() {
           <Ionicons name="chevron-back" size={22} color="#1C1C1E" />
         </Pressable>
         <Text style={styles.title}>{lang === 'fr' ? 'Gestion' : 'Admin'}</Text>
-        <Pressable style={styles.addBtn} onPress={() => router.push('/admin/place/new')}>
-          <Ionicons name="add" size={22} color="#fff" />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/users' as any)}>
+            <Ionicons name="people-outline" size={20} color="#E8571A" />
+          </Pressable>
+          <Pressable style={styles.addBtn} onPress={() => router.push('/admin/place/new')}>
+            <Ionicons name="add" size={22} color="#fff" />
+          </Pressable>
+        </View>
       </View>
 
       {/* Stats row — tapping each card filters the list */}
@@ -197,6 +202,16 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   title: { flex: 1, fontSize: 20, fontWeight: '700', color: '#1C1C1E' },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  usersBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(232,87,26,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   addBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#E8571A',

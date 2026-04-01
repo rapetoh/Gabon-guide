@@ -11,6 +11,7 @@
  */
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
@@ -24,10 +25,20 @@ import {
   View,
 } from 'react-native'
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
 import { useFavorites } from '../hooks/useFavorites'
 import { useSession } from '../hooks/useSession'
 import { supabase } from '../lib/supabase'
 import type { FeedItem } from '../hooks/useVideoFeed'
+import ReviewsBottomSheet from './ReviewsBottomSheet'
+import MenuBottomSheet from './MenuBottomSheet'
+
+// Match FloatingTabBar: bottom = Math.max(insets.bottom, 16) + 8, pill height = 64
+function useTabBarClearance() {
+  const insets = useSafeAreaInsets()
+  return Math.max(insets.bottom, 16) + 8 + 64 + 12 // extra 12px breathing room
+}
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window')
 export const CARD_HEIGHT = SCREEN_HEIGHT
@@ -49,9 +60,12 @@ interface Props {
   isMuted: boolean
   onToggleMute: () => void
   lang: 'fr' | 'en'
+  /** Height of the floating filter header so badges/buttons clear it */
+  headerHeight: number
 }
 
-export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, lang }: Props) {
+export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, lang, headerHeight }: Props) {
+  const tabBarClearance = useTabBarClearance()
   const { session } = useSession()
   const { isFavorite, toggleFavorite } = useFavorites()
   const saved = isFavorite(item.id)
@@ -80,6 +94,9 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
       player.currentTime = 0
     }
   }, [isActive, player, videoSource])
+
+  const [reviewsOpen, setReviewsOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   // ── Photo slideshow ──────────────────────────────────────────────────────────
   const [photoIndex, setPhotoIndex] = useState(0)
@@ -113,7 +130,7 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
   // ── Actions ──────────────────────────────────────────────────────────────────
   function handleToggleSave() {
     if (!session) {
-      router.push('/auth/login')
+      router.push({ pathname: '/auth/login', params: { redirect: `/place/${item.id}` } })
       return
     }
     toggleFavorite.mutate(item.id)
@@ -167,11 +184,15 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
       )}
 
       {/* ── Scrim — dark gradient at bottom so text is readable ── */}
-      <View style={styles.scrim} pointerEvents="none" />
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.78)']}
+        style={styles.scrim}
+        pointerEvents="none"
+      />
 
       {/* ── Mute button (top-right, video only) ── */}
       {videoSource && (
-        <Pressable style={styles.muteBtn} onPress={onToggleMute} hitSlop={12}>
+        <Pressable style={[styles.muteBtn, { top: headerHeight + 8 }]} onPress={onToggleMute} hitSlop={12}>
           <Ionicons
             name={isMuted ? 'volume-mute' : 'volume-high'}
             size={20}
@@ -182,7 +203,7 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
 
       {/* ── Promoted badge (top-left) ── */}
       {item.is_promoted && (
-        <View style={styles.promotedBadge}>
+        <View style={[styles.promotedBadge, { top: headerHeight + 8 }]}>
           <Text style={styles.promotedText}>
             {lang === 'fr' ? 'Promu' : 'Promoted'}
           </Text>
@@ -191,7 +212,7 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
 
       {/* ── Photo dots (slideshow, multiple photos) ── */}
       {!videoSource && item.photos.length > 1 && (
-        <View style={styles.dotsRow} pointerEvents="none">
+        <View style={[styles.dotsRow, { top: headerHeight + 8 }]} pointerEvents="none">
           {item.photos.map((_, i) => (
             <View key={i} style={[styles.dot, i === photoIndex && styles.dotActive]} />
           ))}
@@ -199,7 +220,7 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
       )}
 
       {/* ── Right-side action panel ── */}
-      <View style={styles.actionPanel}>
+      <View style={[styles.actionPanel, { bottom: tabBarClearance + 16 }]}>
         {/* Save */}
         <Pressable style={styles.actionBtn} onPress={handleToggleSave}>
           <Ionicons
@@ -209,6 +230,14 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
           />
           <Text style={styles.actionLabel}>
             {lang === 'fr' ? 'Sauver' : 'Save'}
+          </Text>
+        </Pressable>
+
+        {/* Comments */}
+        <Pressable style={styles.actionBtn} onPress={() => setReviewsOpen(true)}>
+          <Ionicons name="chatbubble-outline" size={27} color="#fff" />
+          <Text style={styles.actionLabel}>
+            {lang === 'fr' ? 'Avis' : 'Reviews'}
           </Text>
         </Pressable>
 
@@ -224,7 +253,7 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
         {item.hasMenuPhotos && (
           <Pressable
             style={styles.actionBtn}
-            onPress={() => router.push(`/place/${item.id}`)}
+            onPress={() => setMenuOpen(true)}
           >
             <Ionicons name="receipt-outline" size={26} color="#fff" />
             <Text style={styles.actionLabel}>Menu</Text>
@@ -234,7 +263,7 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
 
       {/* ── Bottom info overlay ── */}
       <Pressable
-        style={styles.infoOverlay}
+        style={[styles.infoOverlay, { bottom: tabBarClearance }]}
         onPress={() => router.push(`/place/${item.id}`)}
       >
         <Text style={styles.placeName} numberOfLines={1}>
@@ -259,6 +288,23 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
           </Text>
         </View>
       </Pressable>
+      {/* ── Reviews bottom sheet ── */}
+      <ReviewsBottomSheet
+        placeId={item.id}
+        placeName={item.name}
+        visible={reviewsOpen}
+        onClose={() => setReviewsOpen(false)}
+        lang={lang}
+      />
+
+      {/* ── Menu bottom sheet ── */}
+      <MenuBottomSheet
+        placeId={item.id}
+        placeName={item.name}
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        lang={lang}
+      />
     </View>
   )
 }
@@ -273,25 +319,17 @@ const styles = StyleSheet.create({
   noMediaFallback: {
     backgroundColor: '#1a1a1a',
   },
-  // Gradient scrim — simulated with a solid-to-transparent View
+  // Bottom-heavy scrim so text is readable over the media
   scrim: {
-    ...StyleSheet.absoluteFillObject,
-    // Two-stop gradient effect using multiple layered views isn't possible without
-    // expo-linear-gradient, but a single semi-transparent overlay does the job.
-    // For a true gradient, swap this for a LinearGradient.
-    background: undefined,
-    // Bottom-heavy fade
-    top: '40%',
+    position: 'absolute',
+    top: '30%',
     bottom: 0,
     left: 0,
     right: 0,
-    position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   // Mute button
   muteBtn: {
     position: 'absolute',
-    top: 56,
     right: 16,
     width: 36,
     height: 36,
@@ -300,10 +338,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Promoted badge
+  // Promoted badge — top set via inline style using headerHeight
   promotedBadge: {
     position: 'absolute',
-    top: 56,
     left: 16,
     backgroundColor: '#E8571A',
     paddingHorizontal: 10,
@@ -315,10 +352,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  // Photo progress dots
+  // Photo progress dots — top set via inline style using headerHeight
   dotsRow: {
     position: 'absolute',
-    top: 60,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -335,11 +371,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     width: 18,
   },
-  // Right action panel
+  // Right action panel — bottom is set via inline style using tabBarClearance
   actionPanel: {
     position: 'absolute',
     right: 12,
-    bottom: 120,
     alignItems: 'center',
     gap: 24,
   },
@@ -355,10 +390,9 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  // Bottom info
+  // Bottom info — bottom is set via inline style using tabBarClearance
   infoOverlay: {
     position: 'absolute',
-    bottom: 90,
     left: 16,
     right: 80, // leave room for action panel
     gap: 4,

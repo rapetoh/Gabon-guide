@@ -93,8 +93,15 @@ export function PlaceForm({ mode, placeId }: Props) {
     Object.fromEntries(DAY_KEYS.map(d => [d, { ...DEFAULT_DAY }]))
   )
 
-  // Photos
+  // Gallery photos
   const [photos, setPhotos] = useState<{ uri: string; isNew: boolean; isPrimary: boolean; storageId?: string; storagePath?: string }[]>([])
+  // Menu photos
+  const [menuPhotos, setMenuPhotos] = useState<{ uri: string; isNew: boolean; storageId?: string; storagePath?: string }[]>([])
+  // IDs of existing DB photo records to soft-delete on save
+  const [deletedPhotoIds, setDeletedPhotoIds] = useState<string[]>([])
+  // Video — one per place
+  const [video, setVideo] = useState<{ uri: string; isNew: boolean; videoId?: string; storagePath?: string; duration?: number } | null>(null)
+  const [deletedVideoId, setDeletedVideoId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -127,13 +134,31 @@ export function PlaceForm({ mode, placeId }: Props) {
         ))
       }
       if (p.photos?.length) {
-        setPhotos(p.photos.map((ph: any) => ({
+        const gallery = p.photos.filter((ph: any) => !ph.is_menu)
+        const menu = p.photos.filter((ph: any) => ph.is_menu)
+        setPhotos(gallery.map((ph: any) => ({
           uri: supabase.storage.from('place-photos').getPublicUrl(ph.storage_path).data.publicUrl,
           isNew: false,
           isPrimary: ph.is_primary,
           storageId: ph.id,
           storagePath: ph.storage_path,
         })))
+        setMenuPhotos(menu.map((ph: any) => ({
+          uri: supabase.storage.from('place-photos').getPublicUrl(ph.storage_path).data.publicUrl,
+          isNew: false,
+          storageId: ph.id,
+          storagePath: ph.storage_path,
+        })))
+      }
+      const sortedVideos = [...(p.videos ?? [])].sort((a: any, b: any) => a.position - b.position)
+      if (sortedVideos.length > 0) {
+        const v = sortedVideos[0]
+        setVideo({
+          uri: supabase.storage.from('place-videos').getPublicUrl(v.storage_path).data.publicUrl,
+          isNew: false,
+          videoId: v.id,
+          storagePath: v.storage_path,
+        })
       }
     }
   }, [existing, mode])
@@ -259,14 +284,78 @@ export function PlaceForm({ mode, placeId }: Props) {
 
   function removePhoto(idx: number) {
     setPhotos(prev => {
+      const photo = prev[idx]
+      if (!photo.isNew && photo.storageId) {
+        setDeletedPhotoIds(ids => [...ids, photo.storageId!])
+      }
       const updated = prev.filter((_, i) => i !== idx)
-      if (prev[idx].isPrimary && updated.length > 0) updated[0].isPrimary = true
+      if (photo.isPrimary && updated.length > 0) updated[0].isPrimary = true
       return updated
     })
   }
 
   function setPrimary(idx: number) {
     setPhotos(prev => prev.map((p, i) => ({ ...p, isPrimary: i === idx })))
+  }
+
+  async function pickMenuPhoto() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    })
+    if (result.canceled) return
+    const asset = result.assets[0]
+    const compressed = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [{ resize: { width: 1200 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+    )
+    setMenuPhotos(prev => [...prev, { uri: compressed.uri, isNew: true }])
+  }
+
+  async function takeMenuPhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
+    if (status !== 'granted') return
+    const result = await ImagePicker.launchCameraAsync({ quality: 1 })
+    if (result.canceled) return
+    const asset = result.assets[0]
+    const compressed = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [{ resize: { width: 1200 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+    )
+    setMenuPhotos(prev => [...prev, { uri: compressed.uri, isNew: true }])
+  }
+
+  function removeMenuPhoto(idx: number) {
+    setMenuPhotos(prev => {
+      const photo = prev[idx]
+      if (!photo.isNew && photo.storageId) {
+        setDeletedPhotoIds(ids => [...ids, photo.storageId!])
+      }
+      return prev.filter((_, i) => i !== idx)
+    })
+  }
+
+  async function pickVideo() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      quality: 1,
+    })
+    if (result.canceled) return
+    const asset = result.assets[0]
+    // Queue existing video for deletion when replacing
+    if (video && !video.isNew && video.videoId) {
+      setDeletedVideoId(video.videoId)
+    }
+    setVideo({ uri: asset.uri, isNew: true, duration: asset.duration ?? undefined })
+  }
+
+  function removeVideo() {
+    if (video && !video.isNew && video.videoId) {
+      setDeletedVideoId(video.videoId)
+    }
+    setVideo(null)
   }
 
   function normalizePhone(value: string): string {
@@ -399,9 +488,20 @@ export function PlaceForm({ mode, placeId }: Props) {
       }
       const targetId = mode === 'create' ? uuidv4() : placeId!
 
+      // --- Soft-delete removed existing photos ---
+      if (deletedPhotoIds.length > 0) {
+        const { error: delError } = await supabase
+          .from('photos')
+          .update({ is_deleted: true } as any)
+          .in('id', deletedPhotoIds)
+        if (delError) throw delError
+      }
+
       // --- Upload new photos first (create) or alongside (edit) ---
       setUploading(true)
-      const photoInserts: { storage_path: string; is_primary: boolean; position: number }[] = []
+      const photoInserts: { storage_path: string; is_primary: boolean; is_menu: boolean; position: number }[] = []
+
+      // Gallery photos
       const newPhotos = photos.filter(p => p.isNew)
       for (let i = 0; i < newPhotos.length; i++) {
         const photo = newPhotos[i]
@@ -413,7 +513,22 @@ export function PlaceForm({ mode, placeId }: Props) {
           .from('place-photos')
           .upload(fileName, decode(base64), { contentType: 'image/jpeg', upsert: false })
         if (uploadError) throw uploadError
-        photoInserts.push({ storage_path: fileName, is_primary: photo.isPrimary, position: i })
+        photoInserts.push({ storage_path: fileName, is_primary: photo.isPrimary, is_menu: false, position: i })
+      }
+
+      // Menu photos
+      const newMenuPhotos = menuPhotos.filter(p => p.isNew)
+      for (let i = 0; i < newMenuPhotos.length; i++) {
+        const photo = newMenuPhotos[i]
+        const fileName = `${targetId}/menu_${Date.now()}_${i}.jpg`
+        const base64 = await FileSystem.readAsStringAsync(photo.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+        const { error: uploadError } = await supabase.storage
+          .from('place-photos')
+          .upload(fileName, decode(base64), { contentType: 'image/jpeg', upsert: false })
+        if (uploadError) throw uploadError
+        photoInserts.push({ storage_path: fileName, is_primary: false, is_menu: true, position: i })
       }
 
       // --- Write place row only after all photos are safely in storage ---
@@ -447,9 +562,41 @@ export function PlaceForm({ mode, placeId }: Props) {
 
       // --- Insert photo rows now that both storage objects and place row exist ---
       for (const p of photoInserts) {
-        await supabase.from('photos').insert({ place_id: targetId, ...p } as any)
+        await supabase.from('photos').insert({
+          place_id: targetId,
+          storage_path: p.storage_path,
+          is_primary: p.is_primary,
+          is_menu: p.is_menu,
+          is_deleted: false,
+          position: p.position,
+        } as any)
       }
 
+      // --- Upload new video THEN delete old one (order matters — never lose existing on upload failure) ---
+      if (video?.isNew) {
+        const videoFileName = `${targetId}/${Date.now()}.mp4`
+        const videoResponse = await fetch(video.uri)
+        const videoBlob = await videoResponse.blob()
+        const { error: videoUploadError } = await supabase.storage
+          .from('place-videos')
+          .upload(videoFileName, videoBlob, { contentType: 'video/mp4', upsert: false })
+        if (videoUploadError) throw videoUploadError
+        // Upload succeeded — now safe to delete old record
+        if (deletedVideoId) {
+          await supabase.from('videos').delete().eq('id', deletedVideoId)
+        }
+        await supabase.from('videos').insert({
+          place_id: targetId,
+          storage_path: videoFileName,
+          position: 0,
+        } as any)
+      } else if (deletedVideoId) {
+        // Video was removed without replacement
+        await supabase.from('videos').delete().eq('id', deletedVideoId)
+      }
+
+      setDeletedPhotoIds([])
+      setDeletedVideoId(null)
       queryClient.invalidateQueries({ queryKey: ['places'] })
       queryClient.invalidateQueries({ queryKey: ['adminPlaces'] })
       queryClient.invalidateQueries({ queryKey: ['trendingPlaces'] })
@@ -875,7 +1022,7 @@ export function PlaceForm({ mode, placeId }: Props) {
             })}
           </View>
 
-          {/* Photos */}
+          {/* Gallery Photos */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Photos' : 'Photos'}</Text>
             <Text style={styles.fieldHint}>
@@ -909,6 +1056,81 @@ export function PlaceForm({ mode, placeId }: Props) {
                 <Text style={styles.addPhotoText}>{lang === 'fr' ? 'Galerie' : 'Gallery'}</Text>
               </Pressable>
               <Pressable style={styles.addPhotoBtn} onPress={takePhoto}>
+                <Ionicons name="camera-outline" size={24} color="#8E8E93" />
+                <Text style={styles.addPhotoText}>{lang === 'fr' ? 'Caméra' : 'Camera'}</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Video */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Vidéo' : 'Video'}</Text>
+            <Text style={styles.fieldHint}>
+              {lang === 'fr'
+                ? 'Une vidéo par lieu — elle sera affichée dans le feed vertical. Formats acceptés : MP4, MOV.'
+                : 'One video per place — shown in the vertical feed. Accepted formats: MP4, MOV.'}
+            </Text>
+            {video ? (
+              <View style={styles.videoCard}>
+                <View style={styles.videoIconWrap}>
+                  <Ionicons name="play-circle" size={36} color="#fff" />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.videoLabel}>
+                    {video.isNew
+                      ? (lang === 'fr' ? 'Nouvelle vidéo sélectionnée' : 'New video selected')
+                      : (lang === 'fr' ? 'Vidéo enregistrée' : 'Saved video')}
+                  </Text>
+                  {video.isNew && video.duration
+                    ? <Text style={styles.videoMeta}>{Math.round(video.duration)}s</Text>
+                    : null}
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable style={styles.videoActionBtn} onPress={pickVideo}>
+                    <Ionicons name="swap-horizontal" size={16} color="#E8571A" />
+                  </Pressable>
+                  <Pressable style={[styles.videoActionBtn, { backgroundColor: 'rgba(255,59,48,0.1)' }]} onPress={removeVideo}>
+                    <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable style={styles.addVideoBtn} onPress={pickVideo}>
+                <Ionicons name="videocam-outline" size={22} color="#8E8E93" />
+                <Text style={styles.addPhotoText}>
+                  {lang === 'fr' ? 'Choisir une vidéo' : 'Choose a video'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Menu Photos */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Photos du menu' : 'Menu Photos'}</Text>
+            <Text style={styles.fieldHint}>
+              {lang === 'fr'
+                ? 'Photos de la carte ou du menu. Elles s\'affichent dans le panneau "Menu" de la fiche dans le feed — séparées de la galerie principale.'
+                : 'Photos of your menu or food items. They appear in the "Menu" panel on the feed card — separate from the main gallery.'}
+            </Text>
+            <View style={styles.photoGrid}>
+              {menuPhotos.map((photo, idx) => (
+                <View key={idx} style={styles.photoWrap}>
+                  <Image source={{ uri: photo.uri }} style={styles.photoThumb} />
+                  <View style={styles.menuBadge}>
+                    <Ionicons name="receipt-outline" size={10} color="#fff" />
+                  </View>
+                  <View style={styles.photoActions}>
+                    <Pressable style={[styles.photoAction, { backgroundColor: 'rgba(255,59,48,0.12)' }]} onPress={() => removeMenuPhoto(idx)}>
+                      <Ionicons name="trash-outline" size={14} color="#FF3B30" />
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+              <Pressable style={styles.addPhotoBtn} onPress={pickMenuPhoto}>
+                <Ionicons name="image-outline" size={24} color="#8E8E93" />
+                <Text style={styles.addPhotoText}>{lang === 'fr' ? 'Galerie' : 'Gallery'}</Text>
+              </Pressable>
+              <Pressable style={styles.addPhotoBtn} onPress={takeMenuPhoto}>
                 <Ionicons name="camera-outline" size={24} color="#8E8E93" />
                 <Text style={styles.addPhotoText}>{lang === 'fr' ? 'Caméra' : 'Camera'}</Text>
               </Pressable>
@@ -1065,6 +1287,11 @@ const styles = StyleSheet.create({
     width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
   },
   primaryBadgeText: { fontSize: 11, color: '#fff', fontWeight: '800' },
+  menuBadge: {
+    position: 'absolute', top: 4, left: 4,
+    backgroundColor: '#007AFF', borderRadius: 10,
+    width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
+  },
   photoActions: {
     position: 'absolute', bottom: 4, right: 4,
     flexDirection: 'row', gap: 4,
@@ -1082,4 +1309,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   addPhotoText: { fontSize: 11, color: '#8E8E93', fontWeight: '500' },
+  // Video
+  videoCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#1C1C1E', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  videoIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  videoLabel: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  videoMeta: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
+  videoActionBtn: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(232,87,26,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addVideoBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#F2F2F7', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: '#E5E5EA', borderStyle: 'dashed',
+  },
 })

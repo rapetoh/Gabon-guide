@@ -717,32 +717,47 @@ All fields + full validation parity with mobile PlaceForm:
 
 ---
 
-### 7.5 Restaurant Owner Role
+### 7.5 Restaurant Owner Role ✅ IMPLEMENTED (2026-03-29)
 
-**Goal:** Restaurant owners get a restricted admin account to manage only their own listing.
+**Goal:** Restaurant owners get a restricted admin account to manage only their own listing. Admins can assign/change roles from within the app.
 
-**DB change (migration 007):**
-- [ ] Add `role text not null default 'user'` to `profiles` table (values: `'user'`, `'restaurant_owner'`, `'admin'`)
-- [ ] Add `owner_id uuid references profiles(id)` to `places` table (nullable — not all places have an owner account yet)
-- [ ] New RLS policy: `restaurant_owner` can UPDATE `places` WHERE `owner_id = auth.uid()`
-- [ ] New RLS policy: `restaurant_owner` can INSERT/DELETE `photos` WHERE `place_id` matches their owned place
+**DB change (migration 009) ✅ RUN:**
+- [x] `role text not null default 'user'` added to `profiles` (values: `'user'`, `'restaurant_owner'`, `'admin'`)
+- [x] `owner_id uuid references profiles(id)` added to `places` (nullable)
+- [x] RLS: `restaurant_owner` can UPDATE their own place
+- [x] RLS: `restaurant_owner` can INSERT/DELETE photos for their own place
 
-**Files to create:**
-- [ ] `mobile/app/restaurant-admin/_layout.tsx` — auth guard: role must be `restaurant_owner`
-- [ ] `mobile/app/restaurant-admin/index.tsx` — their single place dashboard
-- [ ] `mobile/app/restaurant-admin/edit.tsx` — edit their place info, upload photos/menus
+**Restaurant owner mobile screens ✅:**
+- [x] `mobile/app/restaurant-admin/_layout.tsx` — auth guard: redirects non-owners to home tab
+- [x] `mobile/app/restaurant-admin/index.tsx` — place dashboard (photo, name, category, zone, active badge)
+- [x] `mobile/app/restaurant-admin/edit.tsx` — edit name, description FR/EN, upload gallery + menu photos
+- [x] `mobile/app/(tabs)/profile.tsx` — "Gérer mon restaurant" link shown only when `role = 'restaurant_owner'`
+- [x] `mobile/hooks/useIsAdmin.ts` — exposes `role` field alongside `isAdmin`
 
-**Files to modify:**
-- [ ] `mobile/app/(tabs)/profile.tsx` — show "Manage My Restaurant" link if `role = 'restaurant_owner'`
-- [ ] `mobile/hooks/useIsAdmin.ts` (or relevant auth hook) — also expose `userRole` field
+**Admin user management screens ✅:**
+- [x] `supabase/migrations/011_admin_users_function.sql` — adds `email` column to `profiles`, backfills from `auth.users` (safe in migration context), updates `handle_new_user` trigger to copy email on signup, adds email-change sync trigger, creates `get_all_users_for_admin()` RPC that queries `profiles` only (no cross-schema join — avoids Supabase client-side auth.users restriction)
+- [x] `mobile/app/admin/users/index.tsx` — searchable list: name + email + join date + role badge; search by name OR email; sorted newest first; total count in header
+- [x] `mobile/app/admin/users/[id].tsx` — role editor: pick User / Restaurant Owner / Admin; if Owner, assign a place from a dropdown; warns if place already linked to another owner
+- [x] `mobile/app/admin/index.tsx` — people icon in header → navigates to Users list
+- [x] `mobile/app/(tabs)/profile.tsx` — "Manage Users" row added to Admin section for 1-tap access
+- Note: when setting `admin` role, both `role = 'admin'` and `is_admin = true` are updated to keep RLS working
+
+**User identity improvements ✅:**
+- [x] `supabase/migrations/011_admin_users_function.sql` — `handle_new_user` trigger updated to copy `full_name` from `raw_user_meta_data` (covers Google/Apple OAuth names); backfill updates existing users; email-change sync trigger added
+- [x] `mobile/app/auth/login.tsx` — "Full name" field shown in register mode only; passed as `data: { full_name }` to `supabase.auth.signUp()` → trigger saves to `profiles.full_name`
+- [x] `mobile/locales/en.json` + `fr.json` — added `auth.fullName` translation key
 
 **QA tests:**
 - [ ] User with `role = 'user'` → no "Manage My Restaurant" link visible
-- [ ] User with `role = 'restaurant_owner'` → "Manage My Restaurant" link visible
-- [ ] Restaurant owner can edit their place name/description/hours
-- [ ] Restaurant owner CANNOT edit another restaurant (RLS blocks + UI only shows their place)
-- [ ] Restaurant owner CANNOT access the full admin dashboard
+- [ ] User with `role = 'restaurant_owner'` → "Manage My Restaurant" link visible + dashboard loads their place
+- [ ] Restaurant owner can edit their place name/description; changes save and appear in feed
+- [ ] Restaurant owner CANNOT edit another restaurant (RLS blocks at DB level)
+- [ ] Restaurant owner CANNOT access the full admin dashboard (layout guard redirects)
 - [ ] Admin can still edit all places
+- [ ] Admin opens Users list → all registered users appear with correct role badges
+- [ ] Admin changes a user to restaurant_owner + selects a place → that place now shows as their linked restaurant
+- [ ] Admin demotes restaurant_owner to user → "Manage My Restaurant" link disappears for that user; place owner_id cleared
+- [ ] Admin sets a user to admin → that user gains full admin access (is_admin = true)
 
 ---
 
@@ -757,25 +772,50 @@ All fields + full validation parity with mobile PlaceForm:
 
 **Mobile — implemented:**
 - [x] `expo-video` installed + added to `app.config.js` plugins
-- [x] `mobile/hooks/useVideoFeed.ts` — infinite query, places ranked (promoted first, newest), with videos + gallery photos
+- [x] `mobile/hooks/useVideoFeed.ts` — infinite query with filter support (`categoryId`, `zoneId`, `priceRange`, `openNow`)
 - [x] `mobile/components/VideoFeedCard.tsx` — full-screen card:
   - Video → plays with `expo-video`, auto-play/pause driven by `isActive` prop
   - No video → auto-slides gallery photos with crossfade every 3.5 s
-  - Right-side panel: Save (heart/favorites), Share (native sheet), Menu (if menu photos exist)
+  - Right-side panel: Save (heart/favorites), Share (native sheet), Comments (→ `ReviewsBottomSheet`), Menu (→ `MenuBottomSheet`, only if menu photos exist)
   - Bottom overlay: place name, category · zone, description excerpt, "View place" button
   - Mute/unmute button (top-right, video cards only)
   - Photo progress dots (slideshow cards, multiple photos)
   - Promoted badge (top-left)
-- [x] `mobile/app/(tabs)/index.tsx` — replaced with full-screen vertical FlatList:
+  - All top badges/buttons clear the floating filter header via `headerHeight` prop
+- [x] `mobile/app/(tabs)/index.tsx` — full-screen vertical FlatList with floating filter header:
   - `pagingEnabled` + `snapToInterval` for one-card-per-swipe
   - `viewabilityConfig` (50% threshold) drives `activeIndex` → controls play/pause
-  - `getItemLayout` for perf (no layout measurement on scroll)
-  - Infinite scroll via `fetchNextPage`
+  - `getItemLayout` for perf, infinite scroll via `fetchNextPage`
+  - Floating filter header: category tabs + Open now / price / zone chips + search icon
+  - Search icon → navigates to Explore tab with `focus=1` to auto-focus search bar
+  - Empty state with "Reset filters" button
+
+- [x] `mobile/components/MenuBottomSheet.tsx` — bottom sheet for menu photos:
+  - 2-column photo grid, fetched lazily when sheet opens (not on feed load)
+  - Tap any photo → full-screen viewer with prev/next arrows and "X / N" counter
+  - Empty state if no photos available
+- [x] `mobile/components/ReviewsBottomSheet.tsx` — TikTok-style bottom sheet for reviews:
+  - Slides up over the video feed via `Modal` + `Animated.spring/timing` (no third-party libs)
+  - Shows average rating + count, full review list (avatar initial, name, stars, date, comment)
+  - Inline review form for logged-in users: star picker + optional comment + submit/cancel
+  - Edit / Delete own review without leaving the feed
+  - Login prompt for anonymous users
+  - `KeyboardAvoidingView` handles soft keyboard on iOS/Android
+
+**Explore tab redesigned:**
+- [x] `mobile/app/(tabs)/explore.tsx` — dual-mode screen:
+  - **Discovery mode** (no search/filters): Trending Now, Categories grid, Explore by Area, New in Town
+  - **Search/filter mode** (any input active): filtered place list
+  - Auto-focuses search bar when navigated with `?focus=1`
+
+**Mobile admin — implemented:**
+- [x] `mobile/components/admin/PlaceForm.tsx` — added "Menu Photos" card below gallery photos section; separate pick/take functions upload with `is_menu: true`; menu photos pre-filled when editing; blue receipt badge distinguishes menu thumbs from gallery thumbs
 
 **Web admin — implemented:**
 - [x] `web/components/VideoManager.tsx` — upload / delete / caption-edit for place videos
 - [x] `web/app/admin/places/[id]/videos/page.tsx` — videos management page
 - [x] "Videos →" link added to place edit page header
+- [x] `web/components/PhotoManager.tsx` — already supported menu photos via "Upload as menu photo" toggle + separate gallery/menu sections
 
 **QA tests:**
 - [ ] Swipe up → next place loads; swipe down → previous place
@@ -784,11 +824,19 @@ All fields + full validation parity with mobile PlaceForm:
 - [ ] Mute button toggles audio on video cards; state persists across swipes
 - [ ] Save (heart) → adds/removes from favorites; requires login if not authed
 - [ ] Share → native share sheet opens with place name + deep link
-- [ ] Menu button (only visible when place has menu photos) → opens place detail
+- [ ] Comments button → `ReviewsBottomSheet` slides up over the feed (does NOT navigate away)
+- [ ] Menu button (only visible when place has menu photos) → `MenuBottomSheet` slides up with 2-column photo grid; tap any photo → full-screen viewer with prev/next arrows
 - [ ] "View place" CTA → navigates to `/place/[id]`
+- [ ] Filter header: category tab filters feed in real time
+- [ ] Filter header: Open now chip, price chip, zone dropdown all filter feed
+- [ ] Search icon → Explore tab opens with keyboard focused
 - [ ] Infinite scroll → next page loads when near end of feed
 - [ ] Web admin: upload video → appears in list; delete → removed from list + storage
 - [ ] Web admin: add/edit caption → saved to DB
+- [ ] Explore tab (no filters) → shows Trending, Categories, Areas, New in Town
+- [ ] Explore tab (search/filter active) → shows filtered list
+- [ ] Reviews bottom sheet: tap Comments → sheet slides up over the feed without navigating away
+- [ ] Reviews bottom sheet: logged-in user can submit, edit, and delete a review inline
 
 ---
 
@@ -799,8 +847,8 @@ All fields + full validation parity with mobile PlaceForm:
 - [ ] Menu photos: all 4 menu tests pass
 - [ ] Onboarding: all 6 onboarding tests pass
 - [ ] Restaurant owner role: all 6 role tests pass
-- [ ] Video feed: all 11 video QA tests pass (see 7.6 above)
-- [ ] No regressions: explore, favorites, map, place detail, admin — all still work
+- [ ] Video feed: all 18 video QA tests pass (see 7.6 above)
+- [ ] No regressions: favorites, map, place detail, admin — all still work
 - [ ] TypeScript: `npx tsc --noEmit` → 0 errors
 
 ---

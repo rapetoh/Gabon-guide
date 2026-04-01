@@ -11,6 +11,7 @@ export interface PlaceDetail extends PlaceRow {
   zones: { id: string; name: string } | null
   subcategories: { id: string; name_fr: string; name_en: string } | null
   photos: { id: string; storage_path: string; is_primary: boolean; position: number; is_deleted: boolean; is_menu: boolean }[]
+  videos: { id: string; storage_path: string; thumbnail_url: string | null; position: number }[]
 }
 
 // Fetches a single place with all related data for the detail page.
@@ -25,7 +26,8 @@ export function usePlace(id: string) {
           categories ( id, name_fr, name_en, slug ),
           zones ( id, name ),
           subcategories ( id, name_fr, name_en ),
-          photos ( id, storage_path, is_primary, position, is_deleted, is_menu )
+          photos ( id, storage_path, is_primary, position, is_deleted, is_menu ),
+          videos ( id, storage_path, thumbnail_url, position )
         `)
         .eq('id', id)
         .eq('is_deleted', false)
