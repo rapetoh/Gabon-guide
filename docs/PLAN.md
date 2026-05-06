@@ -1,7 +1,7 @@
 # O'Kili — Technical Build Plan
 
-**Version:** 0.3
-**Last Updated:** March 2026
+**Version:** 0.4
+**Last Updated:** 2026-05-06
 **Linked PRD:** [PRD.md](./PRD.md)
 
 ---
@@ -1001,3 +1001,177 @@ All fields + full validation parity with mobile PlaceForm:
 | Expo Router entry point | `import 'expo-router/entry'` in `index.ts` | Default `registerRootComponent(App)` bypasses Expo Router; shows blank "Open up App.tsx" screen |
 | EAS Build peer deps | `.npmrc` with `legacy-peer-deps=true` | Expo SDK 55 has peer dependency conflicts with npm 10 strict mode |
 | react-native-maps Google API key | Use `infoPlist.GMSApiKey` not `ios.config.googleMapsApiKey` | The latter triggers deprecated `react-native-google-maps` pod which no longer exists in `react-native-maps` 1.x |
+
+---
+
+## 2026-05-06 — 3-Tier Monetization + Coupons + Referrals (planned)
+
+**Trigger:** Founding team (Eunice's PDF, March 2026) proposed a 3-tier B2B model (Free / Standard / Premium) with companion features. The PRD (§6) had the tier model "defined, not enforced." This entry turns it into an enforced product surface and adds two MVP systems (owner coupons with QR redemption, end-user referral codes).
+
+**Source PDF:** [`docs/Remarks from Eunice.pdf`](./Remarks%20from%20Eunice.pdf)
+
+**Status as of 2026-05-06:** Decisions finalized in interactive review with founder. Implementation not yet started.
+
+### Tier composition (final)
+
+| Capability | Free | Standard | Premium |
+|---|---|---|---|
+| Edit name / description / address / hours / contact | ✅ | ✅ | ✅ |
+| Reply to reviews | ✅ | ✅ | ✅ |
+| Photos | ✅ (max 5) | ✅ (unlimited) | ✅ (unlimited) |
+| Video | ❌ | ❌ | ✅ |
+| Menu (photos + PDF upload) | ❌ | ✅ | ✅ |
+| WhatsApp / Call / Website CTAs | ❌ | ✅ | ✅ |
+| Social links (Instagram / Facebook / TikTok) | ❌ | ✅ | ✅ |
+| "Vérifié par O'Kili" badge (auto-derived from tier) | ❌ | ✅ | ✅ |
+| Views count (basic owner stat) | ❌ | ✅ | ✅ |
+| Coupons (create + display) | ❌ | ✅ | ✅ |
+| Trending Now / top-3 in category (one unified surface) | ❌ | ❌ | ✅ |
+| Competition trends (search-trend insights) | ❌ | ❌ | ✅ |
+| Reservations module | post-MVP | post-MVP | post-MVP |
+| Geolocated push notifications | post-MVP | post-MVP | post-MVP |
+| Advanced clicks analytics | post-MVP | post-MVP | post-MVP |
+
+### Other settled decisions
+- **Tier lives on `places`** (not on profile) — future-proofs multi-place owners.
+- **Launch default**: 50+ curated launch listings start on **Standard with a 3-month free promo** (`subscription_expires_at = launch + 3 months`).
+- **Payments**: manual in-person collection. Admin flips tier and expiry date. No in-app payment.
+- **Expiration behavior**: no auto-downgrade. Admin dashboard surfaces an "expiring / expired" filter; admin acts manually.
+- **Owner onboarding**: admin-only (already built — no self-serve "claim your business" flow).
+- **Moderation queue**: **OFF by default** for MVP — owner edits go live immediately. A `system_settings.moderation_enabled` toggle ships, but the queue itself is post-MVP.
+- **Verified badge**: auto-derived from tier ≥ Standard. No separate flag.
+- **Coupon redemption**: QR code shown by user, scanned in restaurant-admin.
+- **Referral entry**: at signup only.
+- **Referral reward**: admin-configurable from settings UI (not hardcoded).
+- **"Top de Liste" + "À la une"**: treated as one surface — existing `is_promoted`-driven Trending Now, gated to Premium, also boosts top-3 in category search.
+- **Global admin requirement**: every tier-feature toggle, per-tier limit, the moderation toggle, and the referral reward configuration must be editable from both the web admin and (where mobile-appropriate) the mobile admin. Stored in DB, read at runtime, no code deploy.
+
+### New DB schema (Migration 014 — to be written)
+
+```sql
+-- Tier on places
+alter table places
+  add column subscription_tier text not null default 'free'
+    check (subscription_tier in ('free', 'standard', 'premium')),
+  add column subscription_expires_at timestamptz,
+  add column social_instagram text,
+  add column social_facebook text,
+  add column social_tiktok text,
+  add column menu_pdf_path text;
+
+create index places_subscription_tier_idx on places(subscription_tier);
+
+alter table places
+  add constraint promoted_requires_premium
+  check (not is_promoted or subscription_tier = 'premium');
+
+-- Admin-editable tier matrix
+create table tier_features (
+  feature_key text not null,
+  tier text not null check (tier in ('free','standard','premium')),
+  enabled boolean not null default false,
+  updated_at timestamptz default now(),
+  primary key (feature_key, tier)
+);
+
+create table tier_limits (
+  tier text primary key check (tier in ('free','standard','premium')),
+  max_photos int not null default 5
+);
+
+-- Coupons
+create table coupons (
+  id uuid primary key default gen_random_uuid(),
+  place_id uuid not null references places(id) on delete cascade,
+  title_fr text not null,
+  title_en text,
+  description_fr text,
+  description_en text,
+  starts_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  max_redemptions_per_user int default 1,
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+
+create table coupon_redemptions (
+  id uuid primary key default gen_random_uuid(),
+  coupon_id uuid not null references coupons(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
+  redemption_code text not null,
+  redeemed_at timestamptz,
+  created_at timestamptz default now(),
+  unique (coupon_id, user_id, redemption_code)
+);
+
+-- Referrals
+alter table profiles
+  add column referral_code text unique,
+  add column referred_by uuid references profiles(id);
+
+create table referral_settings (
+  id int primary key default 1 check (id = 1),
+  reward_type text not null default 'coupon',  -- 'coupon' | 'points' | 'none'
+  referrer_reward_value int default 0,
+  referee_reward_value int default 0,
+  reward_coupon_id uuid references coupons(id),
+  is_active boolean default true,
+  updated_at timestamptz default now()
+);
+
+-- Global settings (currently just moderation toggle)
+create table system_settings (
+  id int primary key default 1 check (id = 1),
+  moderation_enabled boolean default false
+);
+insert into system_settings (id) values (1) on conflict do nothing;
+
+-- Premium "competition trends" backing data
+create table search_trends_weekly (
+  week_of date not null,
+  category_id uuid references categories(id),
+  search_count int not null default 0,
+  primary key (week_of, category_id)
+);
+```
+
+### Implementation order (planned)
+
+Each completed item will get its own dated entry below this one as it ships.
+
+1. Migration 014 + types regen
+2. `usePlaceTier` hook + tier_features/limits seeding + admin matrix UI (web first, then mobile)
+3. Place detail gating end-user-facing
+4. Restaurant-admin tier-awareness (dashboard + edit + locked cards)
+5. Top admin PlaceForm tier controls (mobile + web)
+6. Reviews replies in restaurant-admin (Free-accessible)
+7. Coupons end-to-end (owner create + user view + QR + scanner)
+8. Referral codes (signup field + settings + reward issuing)
+9. Stats screen (views count) for Standard+
+10. Competition trends + scheduled aggregator
+11. Renewals admin filter + expiring stat cards
+12. Moderation toggle UI (switch + system_settings row)
+
+### Out of MVP (Phase 6+)
+- Reservations module (table booking via app)
+- Geolocated push notifications
+- Advanced clicks analytics for owners
+- Self-serve "claim your business" signup
+- In-app payments
+- Moderation queue actual implementation (only the toggle ships in MVP)
+
+### Files to be modified (planned)
+
+**Mobile** — new hooks (`usePlaceTier`, `useTierFeatures`, `useReferralSettings`, `useSystemSettings`, `useCoupons`, `useCouponRedemption`, `useTrends`); restaurant-admin updates (`_layout`, `index`, `edit`, new `coupons`, `scanner`, `reviews`, `trends`, `stats`); top admin (`places/[id]`, new `tier-features`, `tier-limits`, `referral-settings`, `system-settings`, expiring filter on dashboard); end-user (`place/[id]`, `(tabs)/explore`, `auth/signup`); components (`PlaceCard` skinny variant, new `CouponCard`, `CouponQrModal`, `LockedFeatureCard`); `database.types.ts` regen; new `feature-keys.ts`; FR/EN i18n keys.
+
+**Web** — `PlaceForm`, `admin/places/page.tsx`, new `admin/tier-features/page.tsx`, `admin/tier-limits/page.tsx`, `admin/referral-settings/page.tsx`, `admin/system-settings/page.tsx`, `admin/coupons/page.tsx`.
+
+**Supabase** — `functions/aggregate-search-trends/` daily aggregator.
+
+### Pre-existing pre-launch items (still pending, unrelated to this entry)
+- Re-enable Gabon bounding box check in `mobile/components/admin/PlaceForm.tsx` and `web/components/PlaceForm.tsx` before App Store submission
+- Phase 7.1 (Share button), 7.2 (Apple/Google Maps choice sheet), 7.4 (Onboarding)
+- Phase 6 Polish & Launch (app icon, splash, EAS Build, store submission)
+
+### Document hygiene rule
+This file is the source of truth. Going forward, every meaningful decision, completion, or change gets a new dated entry appended below — never overwrites prior history.
