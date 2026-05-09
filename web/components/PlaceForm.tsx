@@ -105,6 +105,15 @@ export default function PlaceForm({ place }: Props) {
   const [isPromoted, setIsPromoted] = useState(place?.is_promoted ?? false)
   const [promotedLabelFr, setPromotedLabelFr] = useState(place?.promoted_label_fr ?? '')
   const [promotedLabelEn, setPromotedLabelEn] = useState(place?.promoted_label_en ?? '')
+  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'standard' | 'premium'>(
+    place?.subscription_tier ?? 'free'
+  )
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState(
+    place?.subscription_expires_at ? String(place.subscription_expires_at).slice(0, 10) : ''
+  )
+  const [socialInstagram, setSocialInstagram] = useState(place?.social_instagram ?? '')
+  const [socialFacebook, setSocialFacebook] = useState(place?.social_facebook ?? '')
+  const [socialTiktok, setSocialTiktok] = useState(place?.social_tiktok ?? '')
   const [hours, setHours] = useState<PlaceHours>(
     (place?.hours as PlaceHours | null) ?? DEFAULT_HOURS
   )
@@ -226,6 +235,8 @@ export default function PlaceForm({ place }: Props) {
 
     const normalizedWebsite = normalizeWebsite(website)
 
+    // is_promoted requires subscription_tier='premium' (DB check constraint)
+    const effectivePromoted = subscriptionTier === 'premium' ? isPromoted : false
     const payload: Database['public']['Tables']['places']['Insert'] = {
       name: name.trim(),
       category_id: categoryId || null,
@@ -244,9 +255,16 @@ export default function PlaceForm({ place }: Props) {
       hours_verified_at: null,
       is_active: isActive,
       is_deleted: false,
-      is_promoted: isPromoted,
-      promoted_label_fr: isPromoted ? (promotedLabelFr.trim() || null) : null,
-      promoted_label_en: isPromoted ? (promotedLabelEn.trim() || null) : null,
+      subscription_tier: subscriptionTier,
+      subscription_expires_at: subscriptionExpiresAt
+        ? new Date(subscriptionExpiresAt + 'T00:00:00Z').toISOString()
+        : null,
+      social_instagram: socialInstagram.trim() ? normalizeWebsite(socialInstagram) : null,
+      social_facebook: socialFacebook.trim() ? normalizeWebsite(socialFacebook) : null,
+      social_tiktok: socialTiktok.trim() ? normalizeWebsite(socialTiktok) : null,
+      is_promoted: effectivePromoted,
+      promoted_label_fr: effectivePromoted ? (promotedLabelFr.trim() || null) : null,
+      promoted_label_en: effectivePromoted ? (promotedLabelEn.trim() || null) : null,
     }
 
     let saveError
@@ -557,22 +575,105 @@ export default function PlaceForm({ place }: Props) {
         </Field>
       </Section>
 
-      {/* Promotion */}
+      {/* Subscription */}
+      <Section title="Subscription">
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Pack</p>
+            <div className="flex gap-2">
+              {(['free', 'standard', 'premium'] as const).map(t => {
+                const selected = subscriptionTier === t
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => {
+                      setSubscriptionTier(t)
+                      if (t !== 'premium' && isPromoted) setIsPromoted(false)
+                    }}
+                    className={`flex-1 rounded-lg py-2 px-3 text-sm font-semibold transition-colors capitalize ${
+                      selected
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {t === 'free' ? 'Free' : t === 'standard' ? 'Standard' : 'Premium'}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <Field label="Expires on (YYYY-MM-DD)">
+            <input
+              type="date"
+              value={subscriptionExpiresAt}
+              onChange={e => setSubscriptionExpiresAt(e.target.value)}
+              className={inputClass}
+            />
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date()
+                  d.setMonth(d.getMonth() + 3)
+                  setSubscriptionExpiresAt(d.toISOString().slice(0, 10))
+                }}
+                className="text-xs px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium"
+              >
+                +3 months
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date()
+                  d.setFullYear(d.getFullYear() + 1)
+                  setSubscriptionExpiresAt(d.toISOString().slice(0, 10))
+                }}
+                className="text-xs px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium"
+              >
+                +1 year
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubscriptionExpiresAt('')}
+                className="text-xs px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium"
+              >
+                Clear
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Empty = no expiration. No auto-downgrade — this is just a reminder for you.
+            </p>
+          </Field>
+        </div>
+      </Section>
+
+      {/* Promotion — Premium tier only */}
       <Section title="Promotion (Trending Now)">
-        <div className={`rounded-lg border p-4 ${isPromoted ? 'border-orange-200 bg-orange-50' : 'border-gray-200'}`}>
-          <label className="flex items-center gap-3 cursor-pointer">
+        <div
+          className={`rounded-lg border p-4 ${
+            subscriptionTier !== 'premium' ? 'opacity-50' : ''
+          } ${isPromoted ? 'border-orange-200 bg-orange-50' : 'border-gray-200'}`}
+        >
+          <label className={`flex items-center gap-3 ${subscriptionTier === 'premium' ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
             <input
               type="checkbox"
               checked={isPromoted}
               onChange={e => setIsPromoted(e.target.checked)}
+              disabled={subscriptionTier !== 'premium'}
               className="accent-orange-500 w-4 h-4"
             />
             <div>
               <span className="text-sm font-semibold text-gray-900">Promoted place</span>
-              <p className="text-xs text-gray-500 mt-0.5">Appears first in Trending Now with a badge on the photo</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {subscriptionTier !== 'premium'
+                  ? 'Premium tier only — change the pack above to enable.'
+                  : 'Appears first in Trending Now with a badge on the photo'}
+              </p>
             </div>
           </label>
-          {isPromoted && (
+          {isPromoted && subscriptionTier === 'premium' && (
             <div className="mt-4 grid grid-cols-2 gap-4">
               <Field label="Badge label (FR)">
                 <input
@@ -594,6 +695,39 @@ export default function PlaceForm({ place }: Props) {
               </Field>
             </div>
           )}
+        </div>
+      </Section>
+
+      {/* Social links — admin-controlled, public visibility gated by tier_features.social_links */}
+      <Section title="Social links">
+        <div className="grid grid-cols-1 gap-4">
+          <Field label="Instagram URL">
+            <input
+              type="text"
+              value={socialInstagram}
+              onChange={e => setSocialInstagram(e.target.value)}
+              className={inputClass}
+              placeholder="https://instagram.com/…"
+            />
+          </Field>
+          <Field label="Facebook URL">
+            <input
+              type="text"
+              value={socialFacebook}
+              onChange={e => setSocialFacebook(e.target.value)}
+              className={inputClass}
+              placeholder="https://facebook.com/…"
+            />
+          </Field>
+          <Field label="TikTok URL">
+            <input
+              type="text"
+              value={socialTiktok}
+              onChange={e => setSocialTiktok(e.target.value)}
+              className={inputClass}
+              placeholder="https://tiktok.com/@…"
+            />
+          </Field>
         </div>
       </Section>
 

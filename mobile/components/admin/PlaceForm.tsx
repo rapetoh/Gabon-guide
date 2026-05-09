@@ -82,6 +82,12 @@ export function PlaceForm({ mode, placeId }: Props) {
   const [isPromoted, setIsPromoted]         = useState(false)
   const [promotedLabelFr, setPromotedLabelFr] = useState('')
   const [promotedLabelEn, setPromotedLabelEn] = useState('')
+  // Subscription tier + expiry + socials
+  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'standard' | 'premium'>('free')
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState('')  // YYYY-MM-DD or ''
+  const [socialInstagram, setSocialInstagram] = useState('')
+  const [socialFacebook, setSocialFacebook] = useState('')
+  const [socialTiktok, setSocialTiktok] = useState('')
 
   // Location
   const [latitude, setLatitude]   = useState<number | null>(null)
@@ -127,6 +133,15 @@ export function PlaceForm({ mode, placeId }: Props) {
       setIsPromoted(p.is_promoted ?? false)
       setPromotedLabelFr(p.promoted_label_fr ?? '')
       setPromotedLabelEn(p.promoted_label_en ?? '')
+      setSubscriptionTier(p.subscription_tier ?? 'free')
+      setSubscriptionExpiresAt(
+        p.subscription_expires_at
+          ? String(p.subscription_expires_at).slice(0, 10)
+          : ''
+      )
+      setSocialInstagram(p.social_instagram ?? '')
+      setSocialFacebook(p.social_facebook ?? '')
+      setSocialTiktok(p.social_tiktok ?? '')
       if (p.latitude) setLatitude(p.latitude)
       if (p.longitude) setLongitude(p.longitude)
       if (p.hours) {
@@ -555,6 +570,9 @@ export function PlaceForm({ mode, placeId }: Props) {
       }
 
       // --- Write place row only after all photos are safely in storage ---
+      // is_promoted requires subscription_tier='premium' (DB check constraint).
+      // Force false on lower tiers so the save can't fail at the DB layer.
+      const effectivePromoted = subscriptionTier === 'premium' ? isPromoted : false
       const payload = {
         name: name.trim(),
         description_fr: descFr.trim() || null,
@@ -567,9 +585,16 @@ export function PlaceForm({ mode, placeId }: Props) {
         address: address.trim() || null,
         website: website.trim() ? normalizeWebsite(website) : null,
         is_active: isActive,
-        is_promoted: isPromoted,
-        promoted_label_fr: isPromoted ? (promotedLabelFr.trim() || null) : null,
-        promoted_label_en: isPromoted ? (promotedLabelEn.trim() || null) : null,
+        subscription_tier: subscriptionTier,
+        subscription_expires_at: subscriptionExpiresAt
+          ? new Date(subscriptionExpiresAt + 'T00:00:00Z').toISOString()
+          : null,
+        social_instagram: socialInstagram.trim() ? normalizeWebsite(socialInstagram) : null,
+        social_facebook: socialFacebook.trim() ? normalizeWebsite(socialFacebook) : null,
+        social_tiktok: socialTiktok.trim() ? normalizeWebsite(socialTiktok) : null,
+        is_promoted: effectivePromoted,
+        promoted_label_fr: effectivePromoted ? (promotedLabelFr.trim() || null) : null,
+        promoted_label_en: effectivePromoted ? (promotedLabelEn.trim() || null) : null,
         latitude: latitude ?? null,
         longitude: longitude ?? null,
         hours,
@@ -689,8 +714,75 @@ export function PlaceForm({ mode, placeId }: Props) {
             </View>
           </View>
 
-          {/* Promotion — paid feature */}
-          <View style={[styles.card, isPromoted && styles.cardPromoted]}>
+          {/* Subscription tier + expiry */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Abonnement' : 'Subscription'}</Text>
+
+            <View style={styles.tierChipRow}>
+              {(['free', 'standard', 'premium'] as const).map(t => {
+                const selected = subscriptionTier === t
+                const label = t === 'free'
+                  ? (lang === 'fr' ? 'Gratuit' : 'Free')
+                  : t === 'standard' ? 'Standard' : 'Premium'
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => {
+                      setSubscriptionTier(t)
+                      // If user demotes a Premium place, drop the promoted toggle silently
+                      if (t !== 'premium' && isPromoted) setIsPromoted(false)
+                    }}
+                    style={[styles.tierChip, selected && styles.tierChipActive]}
+                  >
+                    <Text style={[styles.tierChipText, selected && styles.tierChipTextActive]}>{label}</Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+
+            <View style={{ height: 12 }} />
+
+            <Field
+              label={lang === 'fr' ? 'Expire le (AAAA-MM-JJ)' : 'Expires on (YYYY-MM-DD)'}
+              value={subscriptionExpiresAt}
+              onChange={setSubscriptionExpiresAt}
+              placeholder="2026-08-09"
+              hint={lang === 'fr'
+                ? 'Laisser vide = pas d\'expiration. Aucun changement automatique à l\'expiration — c\'est juste un repère pour vous.'
+                : 'Leave empty = no expiration. No auto-downgrade — this is just a reminder for you.'}
+            />
+            <View style={styles.tierQuickRow}>
+              <Pressable
+                style={styles.tierQuickBtn}
+                onPress={() => {
+                  const d = new Date()
+                  d.setMonth(d.getMonth() + 3)
+                  setSubscriptionExpiresAt(d.toISOString().slice(0, 10))
+                }}
+              >
+                <Text style={styles.tierQuickText}>+3 {lang === 'fr' ? 'mois' : 'months'}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.tierQuickBtn}
+                onPress={() => {
+                  const d = new Date()
+                  d.setFullYear(d.getFullYear() + 1)
+                  setSubscriptionExpiresAt(d.toISOString().slice(0, 10))
+                }}
+              >
+                <Text style={styles.tierQuickText}>+1 {lang === 'fr' ? 'an' : 'year'}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.tierQuickBtn}
+                onPress={() => setSubscriptionExpiresAt('')}
+              >
+                <Text style={styles.tierQuickText}>{lang === 'fr' ? 'Effacer' : 'Clear'}</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Promotion — Premium tier only (DB constraint enforces this) */}
+          <View style={[styles.card, isPromoted && styles.cardPromoted, subscriptionTier !== 'premium' && { opacity: 0.5 }]}>
             <View style={styles.switchRow}>
               <View style={{ flex: 1, gap: 3 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -706,18 +798,23 @@ export function PlaceForm({ mode, placeId }: Props) {
                   )}
                 </View>
                 <Text style={styles.fieldHint}>
-                  {lang === 'fr'
-                    ? 'Apparaît en tête de "Tendances" avec un badge — réservé aux partenaires payants'
-                    : 'Appears at the top of "Trending Now" with a badge — reserved for paying partners'}
+                  {subscriptionTier !== 'premium'
+                    ? (lang === 'fr'
+                        ? 'Disponible uniquement pour les lieux Premium. Changez le pack ci-dessus pour activer.'
+                        : 'Premium tier only. Change the pack above to enable.')
+                    : (lang === 'fr'
+                        ? 'Apparaît en tête de "Tendances" avec un badge'
+                        : 'Appears at the top of "Trending Now" with a badge')}
                 </Text>
               </View>
               <Switch
                 value={isPromoted}
                 onValueChange={setIsPromoted}
+                disabled={subscriptionTier !== 'premium'}
                 trackColor={{ true: '#FF9500' }}
               />
             </View>
-            {isPromoted && (
+            {isPromoted && subscriptionTier === 'premium' && (
               <>
                 <Field
                   label={lang === 'fr' ? 'Badge (français)' : 'Badge (French)'}
@@ -735,6 +832,29 @@ export function PlaceForm({ mode, placeId }: Props) {
                 />
               </>
             )}
+          </View>
+
+          {/* Social links — admin can fill anytime; visibility on detail page is gated by tier_features.social_links */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Réseaux sociaux' : 'Social links'}</Text>
+            <Field
+              label="Instagram"
+              value={socialInstagram}
+              onChange={setSocialInstagram}
+              placeholder="https://instagram.com/…"
+            />
+            <Field
+              label="Facebook"
+              value={socialFacebook}
+              onChange={setSocialFacebook}
+              placeholder="https://facebook.com/…"
+            />
+            <Field
+              label="TikTok"
+              value={socialTiktok}
+              onChange={setSocialTiktok}
+              placeholder="https://tiktok.com/@…"
+            />
           </View>
 
           {/* Basic info */}
@@ -1417,5 +1537,46 @@ const styles = StyleSheet.create({
   videoPreviewActions: {
     position: 'absolute', top: 10, right: 10,
     flexDirection: 'row', gap: 8,
+  },
+
+  // Tier chips + quick-set row
+  tierChipRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tierChip: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+  },
+  tierChipActive: {
+    backgroundColor: '#E8571A',
+  },
+  tierChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3C3C43',
+  },
+  tierChipTextActive: {
+    color: '#fff',
+  },
+  tierQuickRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  tierQuickBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#F2F2F7',
+  },
+  tierQuickText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3C3C43',
   },
 })
