@@ -83,6 +83,9 @@ export default function AdminDashboardScreen() {
         </Pressable>
         <Text style={styles.title}>{lang === 'fr' ? 'Gestion' : 'Admin'}</Text>
         <View style={styles.headerActions}>
+          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/tier-settings' as any)}>
+            <Ionicons name="options-outline" size={20} color="#E8571A" />
+          </Pressable>
           <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/users' as any)}>
             <Ionicons name="people-outline" size={20} color="#E8571A" />
           </Pressable>
