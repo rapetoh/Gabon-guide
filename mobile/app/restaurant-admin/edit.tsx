@@ -22,8 +22,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useSession } from '../../hooks/useSession'
+import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { supabase } from '../../lib/supabase'
+import { LockedFeatureCard } from '../../components/restaurant-admin/LockedFeatureCard'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const PHOTO_THUMB = (SCREEN_WIDTH - 40 - 8) / 3  // 3-column grid
@@ -48,7 +50,7 @@ export default function RestaurantAdminEdit() {
     queryFn: async () => {
       const { data } = await supabase
         .from('places')
-        .select('id, name, description_fr, description_en, owner_id')
+        .select('id, name, description_fr, description_en, address, phone, whatsapp, social_instagram, social_facebook, social_tiktok, subscription_tier, subscription_expires_at, owner_id')
         .eq('id', id)
         .eq('owner_id', session!.user.id)
         .single()
@@ -56,6 +58,7 @@ export default function RestaurantAdminEdit() {
     },
     enabled: !!id && !!session,
   })
+  const tier = usePlaceTier(place ?? undefined)
 
   const { data: existingPhotos, refetch: refetchPhotos } = useQuery({
     queryKey: ['owned-place-photos', id],
@@ -90,6 +93,12 @@ export default function RestaurantAdminEdit() {
   const [nameFr, setNameFr] = useState('')
   const [descFr, setDescFr] = useState('')
   const [descEn, setDescEn] = useState('')
+  const [address, setAddress] = useState('')
+  const [phone, setPhone] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
+  const [instagram, setInstagram] = useState('')
+  const [facebook, setFacebook] = useState('')
+  const [tiktok, setTiktok] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [initialised, setInitialised] = useState(false)
@@ -98,6 +107,12 @@ export default function RestaurantAdminEdit() {
     setNameFr(place.name ?? '')
     setDescFr(place.description_fr ?? '')
     setDescEn(place.description_en ?? '')
+    setAddress(place.address ?? '')
+    setPhone(place.phone ?? '')
+    setWhatsapp(place.whatsapp ?? '')
+    setInstagram(place.social_instagram ?? '')
+    setFacebook(place.social_facebook ?? '')
+    setTiktok(place.social_tiktok ?? '')
     setInitialised(true)
   }
 
@@ -111,9 +126,24 @@ export default function RestaurantAdminEdit() {
       return
     }
     setSaving(true)
+    const updates: Record<string, string | null> = {
+      name: nameFr.trim(),
+      description_fr: descFr.trim() || null,
+      description_en: descEn.trim() || null,
+      address: address.trim() || null,
+      phone: phone.trim() || null,
+      whatsapp: whatsapp.trim() || null,
+    }
+    // Socials only writable when tier allows (RLS would still allow it,
+    // but keep storage consistent with what the place's tier displays)
+    if (tier.can('social_links')) {
+      updates.social_instagram = instagram.trim() || null
+      updates.social_facebook = facebook.trim() || null
+      updates.social_tiktok = tiktok.trim() || null
+    }
     const { error } = await supabase
       .from('places')
-      .update({ name: nameFr.trim(), description_fr: descFr.trim() || null, description_en: descEn.trim() || null })
+      .update(updates)
       .eq('id', id)
       .eq('owner_id', session.user.id)
 
@@ -349,12 +379,115 @@ export default function RestaurantAdminEdit() {
           />
         </View>
 
-        {/* Video */}
+        {/* Address (open to all tiers per PDF) */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>
+            {lang === 'fr' ? 'Adresse' : 'Address'}
+          </Text>
+          <TextInput
+            style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+            value={address}
+            onChangeText={setAddress}
+            placeholderTextColor={colors.textPlaceholder}
+            placeholder={lang === 'fr' ? 'Quartier, rue, repère…' : 'Neighborhood, street, landmark…'}
+          />
+        </View>
+
+        {/* Phone (open to all tiers — tier gates only the CTA on the public detail page) */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>
+            {lang === 'fr' ? 'Téléphone' : 'Phone'}
+          </Text>
+          <TextInput
+            style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            placeholderTextColor={colors.textPlaceholder}
+            placeholder="+241 0X XX XX XX"
+          />
+        </View>
+
+        {/* WhatsApp (open to all tiers — same as phone) */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>WhatsApp</Text>
+          <TextInput
+            style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+            value={whatsapp}
+            onChangeText={setWhatsapp}
+            keyboardType="phone-pad"
+            placeholderTextColor={colors.textPlaceholder}
+            placeholder="+241 0X XX XX XX"
+          />
+        </View>
+
+        {/* Social links — Standard+ */}
+        <View style={[styles.field, { gap: 10 }]}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>
+            {lang === 'fr' ? 'Réseaux sociaux' : 'Social links'}
+          </Text>
+          {tier.can('social_links') ? (
+            <View style={{ gap: 10 }}>
+              <View style={styles.socialField}>
+                <Ionicons name="logo-instagram" size={18} color="#E4405F" />
+                <TextInput
+                  style={[styles.socialInput, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+                  value={instagram}
+                  onChangeText={setInstagram}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  placeholderTextColor={colors.textPlaceholder}
+                  placeholder="https://instagram.com/…"
+                />
+              </View>
+              <View style={styles.socialField}>
+                <Ionicons name="logo-facebook" size={18} color="#1877F2" />
+                <TextInput
+                  style={[styles.socialInput, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+                  value={facebook}
+                  onChangeText={setFacebook}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  placeholderTextColor={colors.textPlaceholder}
+                  placeholder="https://facebook.com/…"
+                />
+              </View>
+              <View style={styles.socialField}>
+                <Ionicons name="logo-tiktok" size={18} color={colors.textPrimary} />
+                <TextInput
+                  style={[styles.socialInput, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+                  value={tiktok}
+                  onChangeText={setTiktok}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  placeholderTextColor={colors.textPlaceholder}
+                  placeholder="https://tiktok.com/@…"
+                />
+              </View>
+            </View>
+          ) : (
+            <LockedFeatureCard
+              title={lang === 'fr' ? 'Réseaux sociaux' : 'Social links'}
+              unlocksAt="standard"
+              icon="link"
+              description={lang === 'fr' ? 'Affichez vos liens Instagram, Facebook et TikTok' : 'Show your Instagram, Facebook and TikTok links'}
+            />
+          )}
+        </View>
+
+        {/* Video — Premium only */}
         <View style={[styles.field, { gap: 10 }]}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>
             {lang === 'fr' ? 'Vidéo' : 'Video'}
           </Text>
-          {existingVideo ? (
+          {!tier.can('video') ? (
+            <LockedFeatureCard
+              title={lang === 'fr' ? 'Ajouter une vidéo' : 'Add a video'}
+              unlocksAt="premium"
+              icon="videocam-outline"
+              description={lang === 'fr' ? 'Mettez en avant votre établissement avec une vidéo verticale' : 'Promote your place with a vertical video'}
+            />
+          ) : existingVideo ? (
             <OwnerVideoPreview
               uri={supabase.storage.from('place-videos').getPublicUrl(existingVideo.storage_path).data.publicUrl}
               lang={lang}
@@ -379,11 +512,20 @@ export default function RestaurantAdminEdit() {
           )}
         </View>
 
-        {/* Gallery Photos */}
+        {/* Gallery Photos — open to all tiers, capped at tier.photoLimit */}
         <View style={[styles.field, { gap: 10 }]}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>
-            {lang === 'fr' ? 'Photos' : 'Photos'}
-          </Text>
+          <View style={styles.labelRow}>
+            <Text style={[styles.label, { color: colors.textSecondary, marginBottom: 0 }]}>
+              {lang === 'fr' ? 'Photos' : 'Photos'}
+            </Text>
+            <Text style={[styles.labelHint, { color: colors.textTertiary }]}>
+              {(() => {
+                const used = existingPhotos?.filter(p => !p.is_menu).length ?? 0
+                if (tier.photoLimit >= 9999) return `${used}`
+                return `${used} / ${tier.photoLimit}`
+              })()}
+            </Text>
+          </View>
           <View style={styles.photoGrid}>
             {existingPhotos?.filter(p => !p.is_menu).map(photo => (
               <View key={photo.id} style={styles.photoWrap}>
@@ -402,49 +544,79 @@ export default function RestaurantAdminEdit() {
                 </Pressable>
               </View>
             ))}
-            <Pressable
-              style={[styles.addPhotoBtn, { backgroundColor: colors.surfaceElevated }]}
-              onPress={() => handlePhotoUpload(false)}
-              disabled={uploading}
-            >
-              {uploading
-                ? <ActivityIndicator size="small" color="#E8571A" />
-                : <Ionicons name="add" size={24} color="#8E8E93" />}
-            </Pressable>
+            {(() => {
+              const used = existingPhotos?.filter(p => !p.is_menu).length ?? 0
+              const atCap = used >= tier.photoLimit
+              return (
+                <Pressable
+                  style={[
+                    styles.addPhotoBtn,
+                    { backgroundColor: colors.surfaceElevated },
+                    atCap && { opacity: 0.4 },
+                  ]}
+                  onPress={() => {
+                    if (atCap) {
+                      Alert.alert(
+                        lang === 'fr' ? 'Limite atteinte' : 'Limit reached',
+                        lang === 'fr'
+                          ? `Votre pack autorise ${tier.photoLimit} photo(s). Passez au pack supérieur pour en ajouter plus.`
+                          : `Your pack allows ${tier.photoLimit} photo(s). Upgrade your pack to add more.`
+                      )
+                      return
+                    }
+                    handlePhotoUpload(false)
+                  }}
+                  disabled={uploading}
+                >
+                  {uploading
+                    ? <ActivityIndicator size="small" color="#E8571A" />
+                    : <Ionicons name={atCap ? 'lock-closed' : 'add'} size={24} color="#8E8E93" />}
+                </Pressable>
+              )
+            })()}
           </View>
         </View>
 
-        {/* Menu Photos */}
+        {/* Menu Photos — Standard+ */}
         <View style={[styles.field, { gap: 10 }]}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>
             {lang === 'fr' ? 'Photos du menu' : 'Menu Photos'}
           </Text>
-          <View style={styles.photoGrid}>
-            {existingPhotos?.filter(p => p.is_menu).map(photo => (
-              <View key={photo.id} style={styles.photoWrap}>
-                <Image
-                  source={{ uri: supabase.storage.from('place-photos').getPublicUrl(photo.storage_path).data.publicUrl }}
-                  style={styles.photoThumb}
-                  contentFit="cover"
-                />
-                <View style={styles.menuBadge}>
-                  <Ionicons name="receipt-outline" size={10} color="#fff" />
+          {!tier.can('menu') ? (
+            <LockedFeatureCard
+              title={lang === 'fr' ? 'Photos du menu' : 'Menu photos'}
+              unlocksAt="standard"
+              icon="restaurant-outline"
+              description={lang === 'fr' ? 'Téléchargez les photos de votre carte ou menu' : 'Upload photos of your menu'}
+            />
+          ) : (
+            <View style={styles.photoGrid}>
+              {existingPhotos?.filter(p => p.is_menu).map(photo => (
+                <View key={photo.id} style={styles.photoWrap}>
+                  <Image
+                    source={{ uri: supabase.storage.from('place-photos').getPublicUrl(photo.storage_path).data.publicUrl }}
+                    style={styles.photoThumb}
+                    contentFit="cover"
+                  />
+                  <View style={styles.menuBadge}>
+                    <Ionicons name="receipt-outline" size={10} color="#fff" />
+                  </View>
+                  <Pressable style={styles.deleteBtn} onPress={() => deletePhoto(photo.id)}>
+                    <Ionicons name="trash-outline" size={13} color="#FF3B30" />
+                  </Pressable>
                 </View>
-                <Pressable style={styles.deleteBtn} onPress={() => deletePhoto(photo.id)}>
-                  <Ionicons name="trash-outline" size={13} color="#FF3B30" />
-                </Pressable>
-              </View>
-            ))}
-            <Pressable
-              style={[styles.addPhotoBtn, { backgroundColor: colors.surfaceElevated }]}
-              onPress={() => handlePhotoUpload(true)}
-              disabled={uploading}
-            >
-              {uploading
-                ? <ActivityIndicator size="small" color="#E8571A" />
-                : <Ionicons name="add" size={24} color="#8E8E93" />}
-            </Pressable>
-          </View>
+              ))}
+              <Pressable
+                style={[styles.addPhotoBtn, { backgroundColor: colors.surfaceElevated }]}
+                onPress={() => handlePhotoUpload(true)}
+                disabled={uploading}
+              >
+                {uploading
+                  ? <ActivityIndicator size="small" color="#E8571A" />
+                  : <Ionicons name="add" size={24} color="#8E8E93" />}
+              </Pressable>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -681,5 +853,27 @@ const styles = StyleSheet.create({
     right: 10,
     flexDirection: 'row',
     gap: 8,
+  },
+  socialField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  socialInput: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    fontSize: 14,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  labelHint: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 })
