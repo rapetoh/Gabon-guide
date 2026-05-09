@@ -97,7 +97,7 @@ export default function TierSettingsScreen() {
             <View style={styles.featureCol} />
             {TIERS.map(t => (
               <View key={t} style={styles.tierCol}>
-                <Text style={styles.tierHeader}>{TIER_LABEL[t][lang]}</Text>
+                <Text style={styles.tierHeader} numberOfLines={1}>{TIER_LABEL[t][lang]}</Text>
               </View>
             ))}
           </View>
@@ -113,24 +113,25 @@ export default function TierSettingsScreen() {
                 const isOn = matrix[feature][tier]
                 const isPending = pending === cellKey
                 return (
-                  <Pressable
-                    key={tier}
-                    onPress={() => toggleCell(feature, tier)}
-                    disabled={isPending}
-                    style={[
-                      styles.cell,
-                      isOn ? styles.cellOn : styles.cellOff,
-                      isPending && styles.cellPending,
-                    ]}
-                  >
-                    {isPending ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : isOn ? (
-                      <Ionicons name="checkmark" size={18} color="#fff" />
-                    ) : (
-                      <View style={styles.dot} />
-                    )}
-                  </Pressable>
+                  <View key={tier} style={styles.tierCol}>
+                    <Pressable
+                      onPress={() => toggleCell(feature, tier)}
+                      disabled={isPending}
+                      style={[
+                        styles.cell,
+                        isOn ? styles.cellOn : styles.cellOff,
+                        isPending && styles.cellPending,
+                      ]}
+                    >
+                      {isPending ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : isOn ? (
+                        <Ionicons name="checkmark" size={18} color="#fff" />
+                      ) : (
+                        <View style={styles.dot} />
+                      )}
+                    </Pressable>
+                  </View>
                 )
               })}
             </View>
@@ -230,13 +231,12 @@ const styles = StyleSheet.create({
   featureLabel: { fontSize: 13, color: '#1C1C1E', fontWeight: '500' },
   featureKey: { fontSize: 10, color: '#A3A3A8', marginTop: 1 },
 
-  tierCol: { width: 56, alignItems: 'center' },
-  tierHeader: { fontSize: 11, color: '#6B6B70', fontWeight: '700', textTransform: 'uppercase' },
+  tierCol: { width: 76, alignItems: 'center' },
+  tierHeader: { fontSize: 10, color: '#6B6B70', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
 
   cell: {
     width: 32, height: 32, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
-    marginHorizontal: 12,
   },
   cellOn:  { backgroundColor: '#E8571A' },
   cellOff: { backgroundColor: '#E5E5EA' },
