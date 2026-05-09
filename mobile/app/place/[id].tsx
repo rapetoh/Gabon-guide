@@ -77,6 +77,7 @@ export default function PlaceDetailScreen() {
   const { session } = useSession()
   const analytics = useAnalytics()
   const { data: place, isLoading } = usePlace(id)
+  const tier = usePlaceTier(place)
   const { isFavorite, toggleFavorite } = useFavorites()
   const { data: reviewsData } = useReviews(id)
   const { data: userReview } = useUserReview(id)
@@ -146,7 +147,6 @@ export default function PlaceDetailScreen() {
   const menuPhotos = allPhotos.filter((ph: any) => ph.is_menu)
 
   const p = place!
-  const tier = usePlaceTier(p)
   const visiblePhotos = photos.slice(0, tier.photoLimit)
   const primaryPhoto = visiblePhotos[0]
   const saved = isFavorite(p.id)
