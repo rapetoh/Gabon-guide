@@ -32,6 +32,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </svg>
             Places
           </NavLinkClient>
+          <NavLinkClient href="/admin/tier-settings">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Tier settings
+          </NavLinkClient>
         </nav>
 
         <div className="px-4 py-4 border-t border-gray-100">
