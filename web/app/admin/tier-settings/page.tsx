@@ -1,6 +1,7 @@
 import { createClient } from '../../../lib/supabase-server'
 import { FEATURE_KEYS, FeatureKey, FEATURE_LABELS } from '../../../lib/feature-keys'
 import type { SubscriptionTier } from '../../../lib/database.types'
+import Topbar from '../../../components/admin/Topbar'
 import TierSettingsClient, { type TierFeatureMatrix, type TierLimitsMap } from './TierSettingsClient'
 
 export const dynamic = 'force-dynamic'
@@ -40,18 +41,20 @@ export default async function TierSettingsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Tier settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
+      <Topbar
+        title="Tier settings"
+        breadcrumb={[{ label: 'Admin', href: '/admin' }, { label: 'Tier settings' }]}
+      />
+      <div className="p-8">
+        <p className="text-sm text-gray-500 mb-5 max-w-2xl">
           What each subscription tier includes. Changes take effect immediately across mobile + web.
         </p>
+        <TierSettingsClient
+          initialMatrix={matrix}
+          initialLimits={limits}
+          labels={FEATURE_LABELS}
+        />
       </div>
-
-      <TierSettingsClient
-        initialMatrix={matrix}
-        initialLimits={limits}
-        labels={FEATURE_LABELS}
-      />
     </div>
   )
 }

@@ -302,7 +302,7 @@ export default function PlaceForm({ place }: Props) {
     : null
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div>
       {/* Fixed-position toasts — visible regardless of scroll position */}
       {success && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-green-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in slide-in-from-bottom-2">
@@ -317,8 +317,11 @@ export default function PlaceForm({ place }: Props) {
         </div>
       )}
 
-      {/* Basic Info */}
-      <Section title="Basic info">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-5 max-w-7xl">
+        {/* ─── Main column ─── */}
+        <div className="space-y-5">
+          {/* Basic Info */}
+          <Section title="Basic info">
         <Field label="Name *">
           <input
             type="text"
@@ -574,6 +577,11 @@ export default function PlaceForm({ place }: Props) {
           />
         </Field>
       </Section>
+        </div>
+        {/* ─── End main column ─── */}
+
+        {/* ─── Sidebar (status / tier / promotion / social) ─── */}
+        <aside className="space-y-5">
 
       {/* Subscription */}
       <Section title="Subscription">
@@ -745,8 +753,13 @@ export default function PlaceForm({ place }: Props) {
           </span>
         </label>
       </Section>
+        </aside>
+        {/* ─── End sidebar ─── */}
+      </div>
+      {/* End grid */}
 
-      {/* Photos */}
+      {/* Photos — full width below the form */}
+      <div className="mt-5 max-w-7xl">
       <Section title="Photos">
         {place?.id ? (
           <a
@@ -776,8 +789,11 @@ export default function PlaceForm({ place }: Props) {
         )}
       </Section>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between pt-2">
+      </div>
+      {/* End Photos wrapper */}
+
+      {/* Actions — sticky at bottom */}
+      <div className="mt-6 max-w-7xl flex items-center justify-between pt-4 border-t border-gray-100">
         <div>
           {place?.id && (
             <button
