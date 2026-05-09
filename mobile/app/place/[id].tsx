@@ -25,6 +25,7 @@ import MapView, { Marker, Polyline } from 'react-native-maps'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { usePlace } from '../../hooks/usePlace'
+import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useFavorites } from '../../hooks/useFavorites'
 import { useReviews, useUserReview, useSubmitReview, useDeleteReview } from '../../hooks/useReviews'
 import { useSession } from '../../hooks/useSession'
@@ -145,12 +146,15 @@ export default function PlaceDetailScreen() {
   const menuPhotos = allPhotos.filter((ph: any) => ph.is_menu)
 
   const p = place!
-  const primaryPhoto = photos[0]
+  const tier = usePlaceTier(p)
+  const visiblePhotos = photos.slice(0, tier.photoLimit)
+  const primaryPhoto = visiblePhotos[0]
   const saved = isFavorite(p.id)
   const description = lang === 'fr' ? p.description_fr : p.description_en
   const category = p.categories
   const zone = p.zones
   const openStatus = p.hours ? isOpenNow(p.hours) : null
+  const hasAnySocial = !!(p.social_instagram || p.social_facebook || p.social_tiktok)
 
   function handleWhatsApp() {
     const url = getWhatsAppUrl(p.whatsapp)
@@ -449,6 +453,14 @@ export default function PlaceDetailScreen() {
                   </Text>
                 </View>
               )}
+              {tier.isVerified && (
+                <View style={[styles.badge, styles.badgeVerified]}>
+                  <Ionicons name="checkmark-circle" size={12} color="#0A84FF" />
+                  <Text style={styles.badgeVerifiedText}>
+                    {lang === 'fr' ? 'Vérifié' : 'Verified'}
+                  </Text>
+                </View>
+              )}
               {category && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeTextGray}>
@@ -495,7 +507,7 @@ export default function PlaceDetailScreen() {
 
           {/* ── Action buttons ── */}
           <View style={styles.actionGrid}>
-            {p.phone && (
+            {p.phone && tier.can('call_cta') && (
               <Pressable style={styles.actionItem} onPress={handleCall}>
                 <View style={styles.actionCircle}>
                   <Ionicons name="call-outline" size={22} color={colors.textPrimary} />
@@ -511,7 +523,7 @@ export default function PlaceDetailScreen() {
                 <Text style={styles.actionLabel}>{lang === 'fr' ? 'Carte' : 'Map'}</Text>
               </Pressable>
             )}
-            {p.website && (
+            {p.website && tier.can('website_cta') && (
               <Pressable style={styles.actionItem} onPress={handleWebsite}>
                 <View style={styles.actionCircle}>
                   <Ionicons name="globe-outline" size={22} color={colors.textPrimary} />
@@ -519,7 +531,7 @@ export default function PlaceDetailScreen() {
                 <Text style={styles.actionLabel}>Web</Text>
               </Pressable>
             )}
-            {p.whatsapp && (
+            {p.whatsapp && tier.can('whatsapp_cta') && (
               <Pressable style={styles.actionItem} onPress={handleWhatsApp}>
                 <View style={[styles.actionCircle, styles.actionCircleWA]}>
                   <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
@@ -528,6 +540,27 @@ export default function PlaceDetailScreen() {
               </Pressable>
             )}
           </View>
+
+          {/* ── Social links (Standard+) ── */}
+          {tier.can('social_links') && hasAnySocial && (
+            <View style={styles.socialRow}>
+              {p.social_instagram && (
+                <Pressable style={styles.socialBtn} onPress={() => Linking.openURL(p.social_instagram!)}>
+                  <Ionicons name="logo-instagram" size={20} color="#E4405F" />
+                </Pressable>
+              )}
+              {p.social_facebook && (
+                <Pressable style={styles.socialBtn} onPress={() => Linking.openURL(p.social_facebook!)}>
+                  <Ionicons name="logo-facebook" size={20} color="#1877F2" />
+                </Pressable>
+              )}
+              {p.social_tiktok && (
+                <Pressable style={styles.socialBtn} onPress={() => Linking.openURL(p.social_tiktok!)}>
+                  <Ionicons name="logo-tiktok" size={20} color={colors.textPrimary} />
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {/* ── About ── */}
           {description && (
@@ -598,13 +631,13 @@ export default function PlaceDetailScreen() {
           </View>
 
           {/* ── Photos ── */}
-          {photos.length > 0 && (
+          {visiblePhotos.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Photos' : 'Photos'}</Text>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-                {photos.map((ph: any, idx: number) => (
+                {visiblePhotos.map((ph: any, idx: number) => (
                   <Pressable key={ph.id ?? idx} style={styles.photoThumb} onPress={() => setPhotoViewerIndex(idx)}>
                     <Image
                       source={{ uri: photoUrl(ph.storage_path) }}
@@ -621,7 +654,7 @@ export default function PlaceDetailScreen() {
           )}
 
           {/* ── Photo viewer ── */}
-          {photoViewerIndex !== null && photos[photoViewerIndex] && (
+          {photoViewerIndex !== null && visiblePhotos[photoViewerIndex] && (
             <Modal
               visible
               transparent
@@ -642,7 +675,7 @@ export default function PlaceDetailScreen() {
                   bouncesZoom
                 >
                   <Image
-                    source={{ uri: photoUrl(photos[photoViewerIndex].storage_path) }}
+                    source={{ uri: photoUrl(visiblePhotos[photoViewerIndex].storage_path) }}
                     style={{ width, height: '100%' }}
                     contentFit="contain"
                   />
@@ -656,7 +689,7 @@ export default function PlaceDetailScreen() {
                     <Ionicons name="chevron-back" size={28} color="#fff" />
                   </Pressable>
                 )}
-                {photoViewerIndex < photos.length - 1 && (
+                {photoViewerIndex < visiblePhotos.length - 1 && (
                   <Pressable
                     style={[styles.menuViewerArrow, { right: 16 }]}
                     onPress={() => setPhotoViewerIndex(photoViewerIndex + 1)}
@@ -674,7 +707,7 @@ export default function PlaceDetailScreen() {
                 </Pressable>
                 <View style={[styles.menuViewerCounter, { top: insets.top + 16 }]}>
                   <Text style={styles.menuViewerCounterText}>
-                    {photoViewerIndex + 1} / {photos.length}
+                    {photoViewerIndex + 1} / {visiblePhotos.length}
                   </Text>
                 </View>
                 <Text style={[styles.menuZoomHintText, { bottom: insets.bottom + 16 }]}>
@@ -685,7 +718,7 @@ export default function PlaceDetailScreen() {
           )}
 
           {/* ── Menu ── */}
-          {menuPhotos.length > 0 && (
+          {tier.can('menu') && menuPhotos.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>{lang === 'fr' ? 'Menu' : 'Menu'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
@@ -1072,14 +1105,14 @@ export default function PlaceDetailScreen() {
 
       {/* ── Bottom CTA ── */}
       <View style={[styles.ctaWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        {p.whatsapp ? (
+        {p.whatsapp && tier.can('whatsapp_cta') ? (
           <Pressable style={styles.ctaBtn} onPress={handleWhatsApp}>
             <Ionicons name="logo-whatsapp" size={20} color="#fff" />
             <Text style={styles.ctaBtnText}>
               {lang === 'fr' ? 'Contacter sur WhatsApp' : 'Contact on WhatsApp'}
             </Text>
           </Pressable>
-        ) : p.phone ? (
+        ) : p.phone && tier.can('call_cta') ? (
           <Pressable style={styles.ctaBtn} onPress={handleCall}>
             <Ionicons name="call-outline" size={20} color="#fff" />
             <Text style={styles.ctaBtnText}>
@@ -1195,6 +1228,13 @@ function createStyles(c: ThemeColors) {
   badgeTextOpen: { color: '#34C759' },
   badgeTextClosed:{ color: '#FF3B30' },
   badgeTextGray: { fontSize: 13, fontWeight: '500', color: c.textSecondary },
+  badgeVerified: {
+    backgroundColor: 'rgba(10,132,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  badgeVerifiedText: { fontSize: 13, fontWeight: '600', color: '#0A84FF' },
 
   placeName: {
     fontSize: 26,
@@ -1259,6 +1299,23 @@ function createStyles(c: ThemeColors) {
     fontWeight: '500',
     color: c.textSecondary,
     textAlign: 'center',
+  },
+
+  // Social links row
+  socialRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  socialBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: c.surfaceInverted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.separator,
   },
 
   // Sections
