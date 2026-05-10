@@ -191,18 +191,14 @@ export default function RestaurantAdminDashboard() {
 
           {/* Reviews & replies — open to all tiers */}
           <Pressable
-            style={[styles.actionBtn, { backgroundColor: colors.surfaceElevated, opacity: 0.55 }]}
-            disabled
+            style={[styles.actionBtn, { backgroundColor: colors.surfaceElevated }]}
+            onPress={() => router.push('/restaurant-admin/reviews' as any)}
           >
             <Ionicons name="chatbubbles-outline" size={22} color="#E8571A" />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
-                {lang === 'fr' ? 'Avis & réponses' : 'Reviews & replies'}
-              </Text>
-              <Text style={[styles.actionHint, { color: colors.textSecondary }]}>
-                {lang === 'fr' ? 'Bientôt disponible' : 'Coming soon'}
-              </Text>
-            </View>
+            <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
+              {lang === 'fr' ? 'Avis & réponses' : 'Reviews & replies'}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
           </Pressable>
         </View>
 

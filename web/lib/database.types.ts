@@ -169,10 +169,15 @@ export interface Database {
           user_id: string
           rating: number
           comment: string | null
+          owner_reply: string | null
+          owner_reply_at: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['reviews']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['reviews']['Row'], 'id' | 'created_at' | 'updated_at' | 'owner_reply' | 'owner_reply_at'> & {
+          owner_reply?: string | null
+          owner_reply_at?: string | null
+        }
         Update: Partial<Pick<Database['public']['Tables']['reviews']['Row'], 'rating' | 'comment'>>
         Relationships: []
       }
@@ -288,7 +293,23 @@ export interface Database {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      set_review_owner_reply: {
+        Args: { p_review_id: string; p_reply: string }
+        Returns: void
+      }
+      get_all_users_for_admin: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          full_name: string | null
+          role: string
+          is_admin: boolean
+          email: string | null
+          joined_at: string
+        }[]
+      }
+    }
   }
 }
 

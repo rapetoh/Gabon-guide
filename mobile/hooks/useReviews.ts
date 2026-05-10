@@ -10,6 +10,8 @@ export interface ReviewWithProfile {
   id: string
   rating: number
   comment: string | null
+  owner_reply: string | null
+  owner_reply_at: string | null
   created_at: string
   profiles: {
     id: string
@@ -26,7 +28,7 @@ export function useReviews(placeId: string) {
       const { data, error } = await supabase
         .from('reviews')
         .select(`
-          id, rating, comment, created_at,
+          id, rating, comment, owner_reply, owner_reply_at, created_at,
           profiles ( id, full_name, avatar_url )
         `)
         .eq('place_id', placeId)
@@ -42,6 +44,25 @@ export function useReviews(placeId: string) {
       return { reviews, average, count: reviews.length }
     },
     enabled: !!placeId,
+  })
+}
+
+// Owner-only mutation: set/update/clear the public reply on a review.
+// Hits the SECURITY DEFINER RPC which checks that the caller is the place
+// owner or an admin server-side. Pass an empty string to clear.
+export function useSetOwnerReply(placeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ reviewId, reply }: { reviewId: string; reply: string }) => {
+      const { error } = await supabase.rpc('set_review_owner_reply', {
+        p_review_id: reviewId,
+        p_reply: reply,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews', placeId] })
+    },
   })
 }
 

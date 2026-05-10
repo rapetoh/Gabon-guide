@@ -924,6 +924,17 @@ export default function PlaceDetailScreen() {
                   {review.comment && (
                     <Text style={styles.reviewComment}>{review.comment}</Text>
                   )}
+                  {review.owner_reply && (
+                    <View style={styles.ownerReplyBox}>
+                      <View style={styles.ownerReplyHeader}>
+                        <Ionicons name="arrow-undo" size={12} color="#E8571A" />
+                        <Text style={styles.ownerReplyLabel}>
+                          {lang === 'fr' ? 'Réponse du restaurant' : 'Reply from the restaurant'}
+                        </Text>
+                      </View>
+                      <Text style={styles.ownerReplyText}>{review.owner_reply}</Text>
+                    </View>
+                  )}
                 </View>
               )
             })}
@@ -1579,6 +1590,31 @@ function createStyles(c: ThemeColors) {
     fontSize: 14,
     color: c.textSecondary,
     lineHeight: 20,
+  },
+  ownerReplyBox: {
+    marginTop: 10,
+    paddingTop: 10,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: '#E8571A',
+    gap: 4,
+  },
+  ownerReplyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ownerReplyLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#E8571A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  ownerReplyText: {
+    fontSize: 13,
+    color: c.textPrimary,
+    lineHeight: 18,
   },
   noReviewsText: {
     fontSize: 14,
