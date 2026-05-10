@@ -1175,3 +1175,136 @@ Each completed item will get its own dated entry below this one as it ships.
 
 ### Document hygiene rule
 This file is the source of truth. Going forward, every meaningful decision, completion, or change gets a new dated entry appended below — never overwrites prior history.
+
+---
+
+## 2026-05-08 → 2026-05-10 — Implementation log: Steps 1-7 + web admin restyle
+
+Founder paired with Claude Code to ship the bulk of the 3-tier monetization plan. All commits pushed to `dev` branch on `https://github.com/rapetoh/Gabon-guide.git`. iOS dev build installed both on the iOS simulator and on Senyo's iPhone (both via `npx expo run:ios` / `--device`).
+
+Work done in chronological order (commit hashes are in `dev`):
+
+### Step 1 — Migration 014 applied (2026-05-08)
+- `supabase/migrations/014_tiers_coupons_referrals.sql` written and applied to the OKiLi Supabase project (`fvmzsxmlpwvtnszmuowc`) via MCP.
+- Backfill: any place that already had `is_promoted = true` was upgraded to `subscription_tier = 'premium'` so the new `promoted_requires_premium` check constraint wouldn't reject existing rows.
+- Seeds: `tier_features` populated with 11 keys × 3 tiers per §1.1; `tier_limits` set to {free: 5, standard: 9999, premium: 9999}; single-row `referral_settings` and `system_settings` (moderation_enabled = false) inserted.
+- Verified seeds: Free=0/11 enabled, Standard=8/11, Premium=11/11.
+- Commit: `876eaa9` (PLAN.md log) → `76f56c5` (migration + foundation hooks + web admin matrix) → `baa791b` (mobile admin matrix).
+
+### Step 2 — Foundation hooks + admin matrix UI (web + mobile)
+- New mobile hooks `usePlaceTier`, `useTierFeatures`, `useTierLimits`, `lib/feature-keys.ts`.
+- Hand-written `database.types.ts` updated in **both** `mobile/lib/` and `web/lib/`. Caught up missing fields on `places` (`is_promoted`, `promoted_label_*`) and `profiles` (`email`), added `videos.thumbnail_url` to Insert as optional, added Functions block for `set_review_owner_reply` and `get_all_users_for_admin`. Both files kept identical via `cp`.
+- Web `/admin/tier-settings` page: server component loads matrix + limits, client component renders a checkbox grid + per-tier `max_photos` inputs. Optimistic updates with rollback on error.
+- Mobile `/admin/tier-settings` screen: same matrix UX adapted to React Native; tap-to-toggle cells, inline-edit photo limits.
+- Sidebar entry "Tier settings" added on web; gear icon button added to the mobile admin dashboard header.
+
+### Step 3 — Place detail tier gating
+- `mobile/app/place/[id].tsx` wired to `usePlaceTier(p)`. Photos slice by `tier.photoLimit`; Photo viewer modal indices use `visiblePhotos`; Action grid CTAs (Call/Website/WhatsApp) gated; new social-links row (IG/FB/TikTok) gated by `tier.can('social_links')`; Menu section gated by `tier.can('menu')`; Vérifié badge added in the title-card badge row when `tier.isVerified`; bottom sticky CTA gated.
+- Hooks-rules bug found and fixed: `usePlaceTier` was being called *after* the early-return for loading state → "Rendered more hooks than during the previous render". Moved the call above the returns. Commit: `629eaa1`.
+- Commit (initial Step 3): `a47439f`.
+
+### Step 4 — Restaurant-admin tier-aware
+- New shared component `mobile/components/restaurant-admin/LockedFeatureCard.tsx`.
+- `restaurant-admin/index.tsx`: tier badge card under the place card with FR/EN label, color-coded per tier, "Expires in N days / Expired" hint when applicable. "Available" section + "Unlock more" section (locked feature cards for coupons / stats / market trends / featured placement).
+- `restaurant-admin/edit.tsx`: adds editable address / phone / WhatsApp (open to ALL tiers per the founder's PDF); adds Social links inputs gated by `tier.can('social_links')` with LockedFeatureCard fallback; gates Video upload by `tier.can('video')`; gates Menu photos by `tier.can('menu')`; gallery photos respect `tier.photoLimit` with used/cap counter and lock state at cap.
+- Save handler writes the new fields and skips socials when tier doesn't permit.
+- Commit: `a9fd6e6`.
+
+### Step 5 — Top admin PlaceForm tier controls (mobile + web)
+- `mobile/components/admin/PlaceForm.tsx` and `web/components/PlaceForm.tsx` both gain:
+  - Pack selector (Free / Standard / Premium) — 3-button segmented.
+  - Subscription `expires_at` date input + +3-months / +1-year / Clear quick buttons. Empty = no expiry. No auto-downgrade.
+  - Social links section (Instagram / Facebook / TikTok URL fields).
+  - Promotion toggle disabled when subscription_tier ≠ premium. Demoting away from Premium auto-clears `is_promoted` in form state.
+  - Save payload writes the new fields and forces `is_promoted = false` for non-Premium.
+- Commit: `bd1f02f`.
+
+### Web admin restyle — between steps 5 and 6 (founder request)
+- Founder shared a desktop reference design (Eunice's friend Claude Design archive) and asked for layout/structure improvements only — **no color or font changes**, login screen and mobile app untouched.
+- New shared `web/components/admin/Topbar.tsx` (breadcrumb + title + actions).
+- `web/app/admin/layout.tsx`: sectioned sidebar (Général / Settings / Coupons), branded mark, user card pinned to bottom with avatar circle + email + role + Sign out icon row. Sidebar widened 224 → 240px.
+- Overview page: 4 hero stat cards (Total / Promoted / Premium / Expiring ≤ 30d) + 2-col panels (Tier distribution bars, Quick actions) + recent places table with Tier and Status pills.
+- Places list: filter chips with live counts, new tier filter strip, soft-tint status pills, richer empty state.
+- PlaceForm: **two-column** xl layout — main editing fields on the left, Subscription / Promotion / Social / Visibility on the right. Photos section moved below the grid, full-width. Action bar with top border at the very bottom.
+- Photos / Videos / Tier settings / New place pages all adopt the new Topbar.
+- LogoutButton reformatted to match sidebar nav row style.
+- Commit: `d8612de`.
+
+### Step 6 — Owner review replies (Free-tier accessible)
+- `supabase/migrations/015_review_owner_replies.sql` written and applied. Adds `owner_reply` text + `owner_reply_at` timestamptz on `reviews`. Adds `set_review_owner_reply(p_review_id, p_reply)` SECURITY DEFINER RPC; only the place owner OR an admin can call it; empty/whitespace clears the reply.
+- Hand-written types updated in both apps: ReviewWithProfile + reviews table Row gain `owner_reply` / `owner_reply_at`. Functions block declares `set_review_owner_reply`.
+- `mobile/hooks/useReviews.ts`: select clause fetches `owner_reply` + `owner_reply_at`; new `useSetOwnerReply` mutation.
+- `mobile/app/restaurant-admin/reviews.tsx` (new): lists every review with stars + comment; per review either a "Reply to this review" CTA or an editable card showing the reply with edit/delete. Multi-line text input + Cancel / Publish / Delete actions.
+- `mobile/app/restaurant-admin/index.tsx`: "Reviews & replies" stub becomes a real link to `/restaurant-admin/reviews`. Open to all tiers.
+- `mobile/app/place/[id].tsx`: reviews list renders `owner_reply` as an indented quote with an orange left border and a "Réponse du restaurant / Reply from the restaurant" eyebrow.
+- Commit: `61d3bba`.
+
+### Step 7 — Coupons end-to-end (PARTIAL — see Open Issues)
+- New native deps installed via `npx expo install`: `expo-camera ~55.0.18` (BarcodeScanner via `<CameraView>`), `react-native-qrcode-svg ^6.3.21` (uses already-installed `react-native-svg`).
+- `mobile/app.config.js`: `expo-camera` plugin added with French permission string; microphone + recordAudioAndroid set to false.
+- Mobile hooks:
+  - `useCoupons.ts`: list (all states / active-only), create, update, delete; `useOwnedPlaceId`.
+  - `useCouponRedemption.ts`: `encodeQrPayload` / `decodeQrPayload`, `useUserRedemption`, `useStartRedemption`, `useRedeemCode`, `useCouponRedemptions`. Owner-side redeem throws `ALREADY_REDEEMED` if double-scanned.
+- Owner UI:
+  - `restaurant-admin/coupons.tsx`: tier-gated by `coupons_create`. Free owners see a LockedFeatureCard. Paid owners get a create form (FR/EN title, description, expiry with quick-pick) and a list with Live/Off/Expired pill, active toggle, delete. Header has a scan shortcut button.
+  - `restaurant-admin/scanner.tsx`: full-screen camera with QR-only barcode scanning, branded reticle + hint, result modal with success/error/already-redeemed states + "Scan another" CTA. Permission gate with explanation.
+  - Restaurant-admin dashboard: "Coupons & promos" entry shown when tier permits.
+- End-user UI:
+  - `components/place/CouponsBlock.tsx`: "Available coupons" section with one card per active coupon (orange left-border + ticket eyebrow + Use button). Tap "Use" → modal with a 220px QR. Reuses an existing redemption row if one exists.
+  - Logged-out users redirected to `/auth/login` with the place URL as redirect.
+- Web admin:
+  - `/admin/coupons` cross-place table with redemption stats + Live/Inactive/Expired filter chips. Status pill computed live (live / scheduled / inactive / expired).
+  - "Coupons" sidebar entry added to the Général group.
+- Native rebuild was required and was performed by founder (port 8084 used because 8081 is held by their other voice-expense project; iPhone build via `--device`). Coupon **creation by owner** confirmed working. **QR rendering on user side** confirmed working (iOS native Camera reads it instantly).
+- Commits: `0b63114` (initial Step 7) → `28b0cfd` (stable cell layout in PlaceForm tier UI from earlier — included for completeness) → `fbaae85` (ref-based onBarcodeScanned + diagnostic logs) → `cac7ce1` (QR payload format change).
+
+---
+
+## Current state at handoff (2026-05-10)
+
+### What works end-to-end
+- All admin matrix toggles + per-tier photo limits (web + mobile).
+- Place detail tier gating, including Vérifié badge and photo cap.
+- Restaurant-admin dashboard with tier badge + locked-feature upsell cards.
+- Restaurant-admin edit with address/phone/WhatsApp + tier-gated socials/menu/video + photo cap.
+- Top admin PlaceForm tier controls + promotion-requires-Premium constraint enforced both client-side and via DB check constraint.
+- Web admin layout/structure refresh, no color or font change. Two-column PlaceForm.
+- Owner review replies (create / edit / delete) and public display on place detail.
+- Coupon creation by Standard+ owners.
+- Coupon QR generation on user side (visible and scannable by iOS native Camera).
+- Web admin `/admin/coupons` cross-place overview.
+
+### Open issues / unfinished work
+1. **CRITICAL — Coupon QR scanning not firing in our in-app scanner.**
+   - Symptom: `mobile/app/restaurant-admin/scanner.tsx` shows live preview, reticle visible. iPhone (Senyo's iPhone) is the scanner, simulator displays the user-side QR. Pointing iPhone at the simulator's QR results in **no scan event firing** — `[scanner] onBarcodeScanned event fired with data:` log (added 2026-05-10) never appears in Metro terminal.
+   - Side evidence: iOS native Camera app reads the QR fine and tries to deep-link, getting an "Unmatched Route" page (Step 7 commit `cac7ce1` changed the QR format from `okili:c:1:<id>:<code>` to `OKILI|1|<id>|<code>` to address that — decoder still accepts both).
+   - Last fix attempt: the format change in `cac7ce1`. Founder reloaded the iPhone with the new code; not yet confirmed whether scanning fires after that. Handoff state: **awaiting founder's test result of `cac7ce1`**.
+   - Confidence in the format-change fix: ~50% per Claude. If it doesn't work, next steps are documented under "Pivot plan if `cac7ce1` doesn't fix it" below.
+
+2. **Pre-existing pre-launch checklist items still pending** (unchanged):
+   - Re-enable Gabon bounding box check in `mobile/components/admin/PlaceForm.tsx` and `web/components/PlaceForm.tsx`. Search for `TODO (pre-launch)`.
+   - PRD Phase 7.1 Share button (Branch.io smart links).
+   - Phase 7.2 Apple/Google Maps choice sheet (most plumbing already exists in `mobile/app/place/[id].tsx`).
+   - Phase 7.4 Onboarding flow.
+   - Phase 6 Launch prep: app icon, splash, EAS Build, App Store + Play Store submission.
+
+3. **App Store bundle ID note** (operational, not code):
+   - Current dev build on Senyo's iPhone uses `com.rapetoh.okili` because `com.okili.app` couldn't auto-sign on this Mac. Founder has a paid Apple Developer Program; the dev profile for `com.okili.app` was missing on this Mac (the project was transferred from Windows via Telegram). For App Store submission, the bundle ID needs to be reverted to `com.okili.app` once the dev profile is generated by Xcode (Signing & Capabilities → Automatically manage signing → pick paid team).
+
+### Pivot plan if `cac7ce1` doesn't fix the scanner
+If founder reports that scanning still doesn't fire after `cac7ce1`:
+1. Strip `mobile/app/restaurant-admin/scanner.tsx` to the minimum: inline `onBarcodeScanned` arrow function, no refs, no useCallback. Add a `console.log` at component render time.
+2. Verify `[scanner] component rendered` fires once per mount in Metro terminal.
+3. If it does and `onBarcodeScanned` STILL doesn't fire, the bug is at the native level (CameraView prop wiring, possibly an SDK 55 quirk). Next move: try a fresh `expo install expo-camera` and full native rebuild.
+4. If `[scanner] component rendered` doesn't fire either, the route isn't reaching this screen — investigate `expo-router` typed-routes handling for `/restaurant-admin/scanner`.
+
+### Project state summary
+- Branch: `dev`. Latest commit: `cac7ce1`. All steps 1-7 + web restyle pushed to `origin/dev`.
+- Native deps current at: `expo ~55.0.6`, `expo-camera ~55.0.18`, `react-native-qrcode-svg ^6.3.21`, `react-native-svg 15.15.3`.
+- Both mobile + web `npx tsc --noEmit` clean (modulo a pre-existing `@expo/vector-icons` resolver warning that's unrelated to any of our work).
+- Two Metro processes coexist on the founder's machine: 8081 (other voice-expense project) and 8082/8083 (this project). Use `--port 8082` or `8083` on `expo start --dev-client` to avoid port collision.
+- Permissions footnote: this project's `node_modules/` was originally moved from Windows via Telegram and macOS quarantined it. Founder ran fresh `npm install` in both `mobile/` and `web/` on 2026-05-09 to clear it permanently. Subsequent `npm install` runs work without manual chmod.
+
+### Memory / context references for the next session
+- `MEMORY.md` exists with: `project_prelaunce_checklist.md` (Gabon bounds check) and `project_architecture_decisions.md` (10+ entries pre-dating this work; tier work is logged here in PLAN.md, not in memory).
+- The founder's design reference archive (Eunice's friend) sits at `/tmp/okili-design/` from earlier in this session — it may be cleared on next restart. The design file the founder agreed to take inspiration from was `screens/web.jsx` in that archive (web/desktop only).
