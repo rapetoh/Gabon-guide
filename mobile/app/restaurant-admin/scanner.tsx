@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { CameraView, useCameraPermissions, type BarcodeSettings } from 'expo-camera'
 import { router } from 'expo-router'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -36,11 +36,19 @@ export default function CouponScanner() {
   // Prevents back-to-back scans of the same QR firing the handler dozens of times
   const lockRef = useRef<string | null>(null)
 
-  // Stable handler — closes over `redeemCode.mutateAsync` and `lang` only.
-  // Recreating this on every render would cause expo-camera to thrash
-  // (constant "Barcode scanning has been disabled / enabled" cycles).
+  // ─── Stable scan handler via refs ─────────────────────────────────
+  // The ONLY way to keep onBarcodeScanned identity stable across all
+  // renders (regardless of state changes, hook returns, etc.) is to
+  // route through a ref. expo-camera tears down its barcode pipeline
+  // when the prop identity changes; thrashing prevents real scans
+  // from firing.
+  const stateRef = useRef(state)
+  stateRef.current = state
+
   const redeemMutate = redeemCode.mutateAsync
-  const handleScan = useCallback(async (raw: string) => {
+
+  const handleScanInner = useCallback(async (raw: string) => {
+    console.log('[scanner] handleScanInner running for', raw)
     if (lockRef.current === raw) return
     lockRef.current = raw
 
@@ -57,7 +65,6 @@ export default function CouponScanner() {
       return
     }
 
-    // Look up coupon to display its title (best effort)
     let couponTitle = ''
     try {
       const { data: coupon } = await supabase
@@ -93,20 +100,25 @@ export default function CouponScanner() {
     }
   }, [lang, redeemMutate])
 
+  const handleScanRef = useRef(handleScanInner)
+  handleScanRef.current = handleScanInner
+
+  // THIS is the prop passed to CameraView. Identity NEVER changes
+  // (empty deps array). It reads current state + latest handler from
+  // refs and decides whether to act.
+  const onBarcodeScanned = useCallback((event: { data: string }) => {
+    console.log('[scanner] onBarcodeScanned event fired with data:', event?.data)
+    if (stateRef.current.kind !== 'idle') {
+      console.log('[scanner] ignoring — state is', stateRef.current.kind)
+      return
+    }
+    void handleScanRef.current(event?.data ?? '')
+  }, [])
+
   const nextScan = useCallback(() => {
     setState({ kind: 'idle' })
     lockRef.current = null
   }, [])
-
-  // Memoised callback passed to CameraView. When the scanner is "paused"
-  // (showing a result overlay) we pass undefined so the camera disables
-  // scanning until the user dismisses. Otherwise we pass a stable function
-  // that forwards the data.
-  const isPaused = state.kind !== 'idle'
-  const onBarcodeScanned = useMemo(
-    () => isPaused ? undefined : ({ data }: { data: string }) => { void handleScan(data) },
-    [isPaused, handleScan]
-  )
 
   // No permission yet → show the request screen
   if (!permission) {
