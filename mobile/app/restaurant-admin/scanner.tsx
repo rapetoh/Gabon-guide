@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
-import { CameraView, useCameraPermissions } from 'expo-camera'
+import { CameraView, useCameraPermissions, type BarcodeSettings } from 'expo-camera'
 import { router } from 'expo-router'
-import { useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -15,6 +14,12 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { decodeQrPayload, useRedeemCode } from '../../hooks/useCouponRedemption'
 import { supabase } from '../../lib/supabase'
+
+// Stable barcode settings reference — recreating this object on every render
+// makes expo-camera tear down and re-install its barcode pipeline, which
+// shows up in logs as "Barcode scanning has been disabled" and prevents
+// scans from firing.
+const BARCODE_SETTINGS: BarcodeSettings = { barcodeTypes: ['qr'] }
 
 type ScanState =
   | { kind: 'idle' }
@@ -31,7 +36,11 @@ export default function CouponScanner() {
   // Prevents back-to-back scans of the same QR firing the handler dozens of times
   const lockRef = useRef<string | null>(null)
 
-  async function handleScan(raw: string) {
+  // Stable handler — closes over `redeemCode.mutateAsync` and `lang` only.
+  // Recreating this on every render would cause expo-camera to thrash
+  // (constant "Barcode scanning has been disabled / enabled" cycles).
+  const redeemMutate = redeemCode.mutateAsync
+  const handleScan = useCallback(async (raw: string) => {
     if (lockRef.current === raw) return
     lockRef.current = raw
 
@@ -41,7 +50,6 @@ export default function CouponScanner() {
         kind: 'error',
         message: lang === 'fr' ? 'QR non reconnu' : 'Unrecognised QR code',
       })
-      // Auto-clear after 2.5s
       setTimeout(() => {
         setState({ kind: 'idle' })
         lockRef.current = null
@@ -67,7 +75,7 @@ export default function CouponScanner() {
     setState({ kind: 'redeeming', couponTitle, code: payload.code })
 
     try {
-      await redeemCode.mutateAsync({ couponId: payload.couponId, code: payload.code })
+      await redeemMutate({ couponId: payload.couponId, code: payload.code })
       setState({ kind: 'success', couponTitle })
     } catch (e: any) {
       const msg = (e?.message ?? '').toString()
@@ -83,12 +91,22 @@ export default function CouponScanner() {
       }
       setState({ kind: 'error', message: userMsg })
     }
-  }
+  }, [lang, redeemMutate])
 
-  function nextScan() {
+  const nextScan = useCallback(() => {
     setState({ kind: 'idle' })
     lockRef.current = null
-  }
+  }, [])
+
+  // Memoised callback passed to CameraView. When the scanner is "paused"
+  // (showing a result overlay) we pass undefined so the camera disables
+  // scanning until the user dismisses. Otherwise we pass a stable function
+  // that forwards the data.
+  const isPaused = state.kind !== 'idle'
+  const onBarcodeScanned = useMemo(
+    () => isPaused ? undefined : ({ data }: { data: string }) => { void handleScan(data) },
+    [isPaused, handleScan]
+  )
 
   // No permission yet → show the request screen
   if (!permission) {
@@ -132,16 +150,14 @@ export default function CouponScanner() {
     )
   }
 
-  const isPaused = state.kind !== 'idle'
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.cameraWrap}>
         <CameraView
           style={StyleSheet.absoluteFill}
           facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={isPaused ? undefined : ({ data }) => handleScan(data)}
+          barcodeScannerSettings={BARCODE_SETTINGS}
+          onBarcodeScanned={onBarcodeScanned}
         />
 
         {/* Header */}
