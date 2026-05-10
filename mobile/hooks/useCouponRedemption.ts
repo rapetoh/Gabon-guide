@@ -22,16 +22,22 @@ function generateCode(): string {
   return out
 }
 
-// Encode a redemption as a QR payload. Keeps the format opaque so we can
-// evolve it without breaking older app versions: prefix + version + json.
+// Encode a redemption as a QR payload. Plain text — no URL scheme, so iOS
+// doesn't intercept the QR as a deep link before our in-app scanner sees it.
+//   Format: OKILI|<v>|<couponId>|<code>
 export function encodeQrPayload(args: { couponId: string; code: string }): string {
-  return `okili:c:1:${args.couponId}:${args.code}`
+  return `OKILI|1|${args.couponId}|${args.code}`
 }
 
 export function decodeQrPayload(raw: string): { couponId: string; code: string } | null {
-  const m = raw.match(/^okili:c:1:([0-9a-f-]{36}):([A-Z0-9]{8})$/)
-  if (!m) return null
-  return { couponId: m[1], code: m[2] }
+  // New (non-URL) format
+  let m = raw.match(/^OKILI\|1\|([0-9a-f-]{36})\|([A-Z0-9]{8})$/)
+  if (m) return { couponId: m[1], code: m[2] }
+  // Legacy format (early Step 7 builds) — keeps already-displayed coupons
+  // readable so users don't have to re-open the modal.
+  m = raw.match(/^okili:c:1:([0-9a-f-]{36}):([A-Z0-9]{8})$/)
+  if (m) return { couponId: m[1], code: m[2] }
+  return null
 }
 
 // User-side: fetch the user's existing redemption for a coupon, if any.
