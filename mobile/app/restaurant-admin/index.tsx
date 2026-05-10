@@ -200,6 +200,20 @@ export default function RestaurantAdminDashboard() {
             </Text>
             <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
           </Pressable>
+
+          {/* Coupons & promos — Standard+ */}
+          {tier.can('coupons_create') && (
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: colors.surfaceElevated }]}
+              onPress={() => router.push('/restaurant-admin/coupons' as any)}
+            >
+              <Ionicons name="ticket-outline" size={22} color="#E8571A" />
+              <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
+                {lang === 'fr' ? 'Coupons & promos' : 'Coupons & promos'}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+            </Pressable>
+          )}
         </View>
 
         {/* Locked features above the owner's tier */}

@@ -35,6 +35,7 @@ import { getWhatsAppUrl } from '../../utils/formatWhatsApp'
 import { isOpenNow } from '../../utils/isOpenNow'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { ThemeColors } from '../../constants/themes'
+import CouponsBlock from '../../components/place/CouponsBlock'
 
 const { width } = Dimensions.get('window')
 const HERO_HEIGHT = 320
@@ -561,6 +562,9 @@ export default function PlaceDetailScreen() {
               )}
             </View>
           )}
+
+          {/* ── Coupons (active only) ── */}
+          <CouponsBlock placeId={p.id} />
 
           {/* ── About ── */}
           {description && (

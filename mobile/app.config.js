@@ -55,6 +55,15 @@ export default {
             'O\'Kili utilise votre position pour trouver les lieux près de vous.',
         },
       ],
+      [
+        'expo-camera',
+        {
+          cameraPermission:
+            'O\'Kili a besoin de la caméra pour scanner les coupons que vos clients vous présentent.',
+          microphonePermission: false,
+          recordAudioAndroid: false,
+        },
+      ],
     ],
     scheme: 'okili',
     experiments: {
