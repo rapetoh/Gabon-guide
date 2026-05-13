@@ -206,9 +206,12 @@ export function useAdminCoupons(args: {
   return useQuery({
     queryKey: ['admin-coupons', page, perPage, search.trim().toLowerCase(), filter],
     queryFn: async () => {
+      // Since migration 020 introduced coupon_places, there are now two FK
+      // paths between coupons and places (direct + through the join table).
+      // PostgREST can't auto-pick — we must name the FK explicitly.
       let q = supabase
         .from('coupons')
-        .select('*, places(name)', { count: 'exact' })
+        .select('*, places!coupons_place_id_fkey(name)', { count: 'exact' })
         .order('created_at', { ascending: false })
 
       if (filter === 'live')     q = q.eq('is_active', true).lte('starts_at', nowIso).gt('expires_at', nowIso)

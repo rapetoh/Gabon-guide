@@ -36,7 +36,7 @@ export default async function ReferralsPage() {
     supabase.from('referral_settings').select('*').eq('id', 1).maybeSingle(),
     supabase
       .from('coupons')
-      .select('id, title_fr, title_en, expires_at, place_id, places(name)')
+      .select('id, title_fr, title_en, expires_at, place_id, places!coupons_place_id_fkey(name)')
       .eq('is_active', true)
       .gt('expires_at', nowIso)
       .order('expires_at', { ascending: true }),

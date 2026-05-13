@@ -40,7 +40,7 @@ function useActiveCouponsForReward() {
       const nowIso = new Date().toISOString()
       const { data, error } = await supabase
         .from('coupons')
-        .select('id, title_fr, title_en, expires_at, places(name)')
+        .select('id, title_fr, title_en, expires_at, places!coupons_place_id_fkey(name)')
         .eq('is_active', true)
         .gt('expires_at', nowIso)
         .order('expires_at', { ascending: true })

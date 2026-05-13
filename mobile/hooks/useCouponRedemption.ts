@@ -285,6 +285,8 @@ export function useMyCoupons() {
       if (!session) return []
       const nowIso = new Date().toISOString()
       // Left-join on places so platform coupons (place_id NULL) are included.
+      // The FK name on the embedding is explicit because migration 020
+      // introduced a second path coupons ↔ places via coupon_places.
       const { data, error } = await supabase
         .from('coupon_redemptions')
         .select(`
@@ -302,7 +304,7 @@ export function useMyCoupons() {
             is_active,
             starts_at,
             place_id,
-            place:places ( id, name )
+            place:places!coupons_place_id_fkey ( id, name )
           )
         `)
         .eq('user_id', session.user.id)

@@ -50,7 +50,7 @@ export default async function ActivityPage({
       .from('coupon_redemptions')
       .select(`
         id, user_id, redeemed_at, bill_amount, discount_applied,
-        coupon:coupons!inner ( title_fr, place:places!inner(name) ),
+        coupon:coupons!inner ( title_fr, place:places!coupons_place_id_fkey(name) ),
         profile:profiles!coupon_redemptions_user_id_fkey(full_name, email)
       `)
       .not('redeemed_at', 'is', null)

@@ -56,7 +56,7 @@ export default async function AdminCouponsPage({
   let q = supabase
     .from('coupons')
     .select(
-      'id, place_id, title_fr, title_en, starts_at, expires_at, is_active, is_system, created_at, max_redemptions_per_user, max_total_redemptions, discount_type, discount_value, places(id, name, subscription_tier)',
+      'id, place_id, title_fr, title_en, starts_at, expires_at, is_active, is_system, created_at, max_redemptions_per_user, max_total_redemptions, discount_type, discount_value, places!coupons_place_id_fkey(id, name, subscription_tier)',
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
