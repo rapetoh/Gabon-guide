@@ -63,6 +63,7 @@ function CouponCard({ coupon, lang, onUse }: CouponCardProps) {
   const title = lang === 'en' && coupon.title_en ? coupon.title_en : coupon.title_fr
   const desc = lang === 'en' && coupon.description_en ? coupon.description_en : coupon.description_fr
   const dLabel = discountLabel(coupon, lang)
+  const isPlatform = coupon.place_id === null
 
   const { data: usage } = useCouponUsage(coupon.id)
   const { data: lastRedemption } = useLastUserRedemption(coupon.id)
@@ -75,16 +76,18 @@ function CouponCard({ coupon, lang, onUse }: CouponCardProps) {
 
   return (
     <View style={[styles.couponCard, { backgroundColor: colors.surfaceElevated }]}>
-      <View style={styles.couponLeftBorder} />
+      <View style={[styles.couponLeftBorder, isPlatform && { backgroundColor: '#8B5CF6' }]} />
       <View style={styles.couponBody}>
         <View style={styles.couponHeader}>
-          <Ionicons name="ticket" size={16} color="#E8571A" />
-          <Text style={styles.couponEyebrow}>
-            {lang === 'fr' ? 'Coupon' : 'Coupon'}
+          <Ionicons name={isPlatform ? 'globe-outline' : 'ticket'} size={16} color={isPlatform ? '#8B5CF6' : '#E8571A'} />
+          <Text style={[styles.couponEyebrow, isPlatform && { color: '#8B5CF6' }]}>
+            {isPlatform
+              ? (lang === 'fr' ? "Promo O'Kili" : "O'Kili promo")
+              : (lang === 'fr' ? 'Coupon' : 'Coupon')}
           </Text>
           {dLabel && (
-            <View style={styles.discountPill}>
-              <Text style={styles.discountPillText}>{dLabel}</Text>
+            <View style={[styles.discountPill, isPlatform && { backgroundColor: 'rgba(139,92,246,0.12)' }]}>
+              <Text style={[styles.discountPillText, isPlatform && { color: '#8B5CF6' }]}>{dLabel}</Text>
             </View>
           )}
           <View style={{ flex: 1 }} />

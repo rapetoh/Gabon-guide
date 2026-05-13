@@ -254,32 +254,45 @@ export default function ProfileScreen() {
               {lang === 'fr' ? 'Mes coupons' : 'My coupons'}
             </Text>
             <View style={{ gap: 10 }}>
-              {myCoupons.map(c => (
-                <Pressable
-                  key={c.redemptionId}
-                  style={styles.myCouponCard}
-                  onPress={() => router.push(`/place/${c.placeId}` as any)}
-                >
-                  <View style={styles.myCouponBorder} />
-                  <View style={styles.myCouponBody}>
-                    <View style={styles.myCouponTop}>
-                      <Text style={styles.myCouponPlace} numberOfLines={1}>{c.placeName}</Text>
-                      {discountLabel(c, lang) && (
-                        <View style={styles.myCouponDiscount}>
-                          <Text style={styles.myCouponDiscountText}>{discountLabel(c, lang)}</Text>
-                        </View>
-                      )}
+              {myCoupons.map(c => {
+                const placeLabel = c.isPlatform
+                  ? (lang === 'fr' ? "Promo O'Kili" : "O'Kili promo")
+                  : (c.placeName ?? '—')
+                return (
+                  <Pressable
+                    key={c.redemptionId}
+                    style={styles.myCouponCard}
+                    onPress={() => {
+                      if (c.placeId) router.push(`/place/${c.placeId}` as any)
+                    }}
+                    disabled={!c.placeId}
+                  >
+                    <View style={styles.myCouponBorder} />
+                    <View style={styles.myCouponBody}>
+                      <View style={styles.myCouponTop}>
+                        <Text style={styles.myCouponPlace} numberOfLines={1}>{placeLabel}</Text>
+                        {discountLabel(c, lang) && (
+                          <View style={styles.myCouponDiscount}>
+                            <Text style={styles.myCouponDiscountText}>{discountLabel(c, lang)}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.myCouponTitle} numberOfLines={2}>
+                        {lang === 'en' && c.titleEn ? c.titleEn : c.titleFr}
+                      </Text>
+                      <Text style={styles.myCouponMeta}>
+                        {c.isPlatform
+                          ? (lang === 'fr' ? 'Valable dans tous les restaurants · Expire le ' : 'Valid at any restaurant · Until ')
+                          : (lang === 'fr' ? 'Expire le ' : 'Until ')}
+                        {formatExpiry(c.expiresAt, lang)}
+                      </Text>
                     </View>
-                    <Text style={styles.myCouponTitle} numberOfLines={2}>
-                      {lang === 'en' && c.titleEn ? c.titleEn : c.titleFr}
-                    </Text>
-                    <Text style={styles.myCouponMeta}>
-                      {lang === 'fr' ? 'Expire le ' : 'Until '}{formatExpiry(c.expiresAt, lang)}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} style={styles.myCouponChevron} />
-                </Pressable>
-              ))}
+                    {c.placeId && (
+                      <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} style={styles.myCouponChevron} />
+                    )}
+                  </Pressable>
+                )
+              })}
             </View>
           </View>
         )}

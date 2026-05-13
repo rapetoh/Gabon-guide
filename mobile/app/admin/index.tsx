@@ -83,6 +83,9 @@ export default function AdminDashboardScreen() {
         </Pressable>
         <Text style={styles.title}>{lang === 'fr' ? 'Gestion' : 'Admin'}</Text>
         <View style={styles.headerActions}>
+          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/coupons' as any)}>
+            <Ionicons name="ticket-outline" size={20} color="#E8571A" />
+          </Pressable>
           <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/activity' as any)}>
             <Ionicons name="time-outline" size={20} color="#E8571A" />
           </Pressable>

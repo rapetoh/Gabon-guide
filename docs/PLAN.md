@@ -1770,3 +1770,112 @@ Both `npx tsc --noEmit` runs clean (modulo the pre-existing `@expo/vector-icons`
 - The user-side activity hook merges streams client-side and caps at `limit` rows. If a user has a lot of activity, "Load more" pagination is a small follow-up but not urgent.
 - `credit_transactions.place_id` is set for `redemption_session` reason; null for `referral_signup` / `referral_invite` / `admin_adjust`. Owner-side filter relies on that.
 
+---
+
+## 2026-05-12 (cont.) — Platform coupons + admin coupons UI at scale
+
+Founder pointed out two real gaps:
+1. Admins should be able to create coupons that are **not** tied to a single restaurant — global promos (Christmas / launch / holiday), and "valid at this subset of partners" promos.
+2. The admin coupons UI was built for ~tens of rows; at 500 it falls apart, especially on mobile.
+
+Shipped both end-to-end. No business-model enforcement (who funds the discount stays a real-world arrangement between admin + restaurants); the code just records the discount applied.
+
+### Migration 020 + 020b (applied)
+
+`supabase/migrations/020_platform_coupons.sql`:
+- `coupons.place_id` now nullable. `NULL` = platform coupon.
+- New `coupon_places (coupon_id, place_id, created_at)` join table. Empty for a platform coupon = "valid everywhere"; rows = "valid at this subset."
+- RLS on `coupon_places`: public read (so place-detail pages can render the right ones), admin-only write.
+- Existing `coupons` RLS already handles the new case correctly: the owner-side check requires `places.owner_id = auth.uid()`, which fails when `place_id IS NULL`, so platform coupons are effectively admin-only by construction.
+
+`supabase/migrations/020b_redeem_session_accepts_platform_coupons.sql`:
+- Updated `apply_redemption_session` RPC place-match logic:
+  - `coupon.place_id IS NOT NULL` → must equal `p_place_id` (existing single-place case).
+  - `coupon.place_id IS NULL` → valid if no `coupon_places` rows exist OR a matching `coupon_places` row exists for `p_place_id`. Otherwise throws `WRONG_PLACE`.
+- Everything else (quotas / active / expiry / authz / credit / bill math) unchanged.
+
+### Types
+
+Mobile `database.types.ts` (synced to web):
+- `coupons.place_id: string | null`.
+- Added `coupon_places` table type.
+
+### Hooks
+
+`mobile/hooks/useCoupons.ts`:
+- `Coupon.place_id` is now nullable. Comment clarifies what the null means.
+- `useActiveCouponsForPlace` now merges per-place coupons with platform coupons. Two parallel queries — place-tied + platform — then for the platform set we resolve scope from `coupon_places` and keep only the ones valid at that place (no rows = everywhere; rows = check membership).
+- New `useAdminCoupons({ page, perPage, search, filter })` — paginated cross-place query, server-side filter chips (`all` / `live` / `inactive` / `expired` / `platform`), server-side title `ilike` search + client-side place-name search. Returns `{ rows, totalCount, hasMore }` plus per-coupon `scopeKind` (single | platform_all | platform_subset) and redemption counts.
+- `useCreatePlatformCoupon` mutation — inserts with `place_id = null`, then bulk-inserts `coupon_places` if scope is "subset." Rolls back the parent row if scope insertion fails.
+- `useDeletePlatformCoupon`, `useAllPlacesLite` helpers.
+
+`mobile/hooks/useCouponRedemption.ts`:
+- `useMyCoupons` now left-joins the place (`places ( id, name )` without `!inner`) so platform coupons surface for the user. The returned `MyCouponEntry` gains `isPlatform` boolean, `placeId` / `placeName` are nullable.
+
+### Mobile admin
+
+New `mobile/app/admin/coupons/index.tsx`:
+- Header with **+** button → `/admin/coupons/new`.
+- Filter chips (All / Live / Platform / Inactive / Expired) + search input. Both reset to page 0 when changed.
+- Cards show the discount pill, scope label (place name / "Tous les restaurants" / "N restaurants"), status pill, expiry, used / generated counts. Platform coupons rendered with a violet globe icon to visually separate them from owner coupons.
+- Trash button only on platform coupons (admin-managed); owner coupons have to be managed from the owner side.
+- Prev/Next paginator at 25 per page.
+
+New `mobile/app/admin/coupons/new.tsx`:
+- Form: FR + EN titles, details, expiry (with +1w / +1m / +3m quick chips), per-customer limit, total quota, discount type (None / % / FCFA) + value, scope toggle (All / Selected). Selected mode shows a searchable multi-select of every place.
+- Validates: title required, expiry future, % between 1-100, scope-subset requires at least one place.
+
+`mobile/app/admin/index.tsx`: new ticket icon in the header opens `/admin/coupons`.
+
+`mobile/app/admin/referrals.tsx`: replaced the `Alert.alert` reward-coupon picker with a proper `<Modal presentationStyle="pageSheet">` containing a search box + scrollable list + "No reward" option + "Selected" highlight. `Alert.alert` breaks past ~10 entries on iOS; the modal scales to hundreds.
+
+### Mobile end-user
+
+`mobile/components/place/CouponsBlock.tsx`:
+- Platform coupons render with a violet left-border + violet eyebrow label "**Promo O'Kili**" instead of orange "Coupon" + a globe icon. Discount pill also flips to violet. Makes the distinction obvious to users who aren't familiar with the underlying model.
+
+`mobile/app/(tabs)/profile.tsx`:
+- "My coupons" cards handle `isPlatform === true` rows: header label is "Promo O'Kili" instead of a place name; meta line says "Valid at any restaurant"; tap on the card is a no-op when there's no specific place to route to. Chevron is hidden in that case.
+
+### Web admin
+
+`web/app/admin/coupons/page.tsx` (rewritten):
+- Pagination (25 per page, prev/next with disabled states + total count).
+- Server-side title search via `ilike` + client-side place-name post-filter.
+- New "Platform" filter chip.
+- New "+ New platform coupon" CTA top-right → `/admin/coupons/new`.
+- Scope column visually distinguishes single-place coupons (linked place name) from platform-all and platform-subset variants (violet pill).
+- URL state preserved via search params so navigation back retains filter + page.
+
+New `web/app/admin/coupons/new/page.tsx` + `NewCouponClient.tsx`:
+- Server component loads every undeleted place once; passes to a client form.
+- Client form mirrors the mobile flow: titles, details, expiry, quotas, discount, scope toggle, place multi-select (searchable). Rollback-on-error logic for scope inserts.
+
+### tsc
+
+Both `npx tsc --noEmit` runs clean.
+
+### Files touched / created
+- `supabase/migrations/020_platform_coupons.sql` (new, applied)
+- `supabase/migrations/020b_redeem_session_accepts_platform_coupons.sql` (new, applied)
+- `mobile/lib/database.types.ts` + `web/lib/database.types.ts` (synced)
+- `mobile/hooks/useCoupons.ts` (platform-aware list + admin hooks)
+- `mobile/hooks/useCouponRedemption.ts` (left-join, `isPlatform` in MyCouponEntry)
+- `mobile/app/admin/coupons/index.tsx` (new)
+- `mobile/app/admin/coupons/new.tsx` (new)
+- `mobile/app/admin/index.tsx` (added Coupons header icon)
+- `mobile/app/admin/referrals.tsx` (modal-based coupon picker)
+- `mobile/app/(tabs)/profile.tsx` (platform-coupon handling in My Coupons)
+- `mobile/components/place/CouponsBlock.tsx` (violet platform badge)
+- `web/app/admin/coupons/page.tsx` (rewritten with pagination + search + scope)
+- `web/app/admin/coupons/new/page.tsx` (new)
+- `web/app/admin/coupons/new/NewCouponClient.tsx` (new)
+- `docs/PLAN.md` (this entry)
+
+### What changes for the next session
+- The admin can now publish promos that aren't tied to one restaurant. They show up automatically on every place's detail page that's in scope, side-by-side with the place's own coupons, marked visually as "Promo O'Kili."
+- The reward-coupon picker on `/admin/referrals` no longer breaks at scale.
+- `/admin/coupons` (web + mobile) is now ready for hundreds of coupons. Same pagination + search treatment should be applied to `/admin/activity` and the existing `/admin/users` next time someone scales them — same pattern.
+- Place owners cannot edit or delete platform coupons (enforced by RLS via the existing owner-or-admin policy — the owner check requires the joined place row, which doesn't exist for `place_id IS NULL`).
+- Business model is still a real-world decision: who absorbs the discount on a platform coupon (the platform via reimbursement, or partner restaurants who agreed up front) is not enforced in code. The RPC simply records the discount applied — accounting lives elsewhere.
+

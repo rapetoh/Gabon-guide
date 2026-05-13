@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -112,30 +113,20 @@ export default function AdminReferralsScreen() {
     }
   }
 
-  function pickCoupon() {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+  function openCouponPicker() {
     if (!coupons || coupons.length === 0) {
       Alert.alert(
         lang === 'fr' ? 'Aucun coupon actif' : 'No active coupons',
         lang === 'fr'
-          ? 'Créez d\'abord un coupon depuis le tableau de bord d\'un restaurant.'
-          : 'Create a coupon first from a restaurant\'s dashboard.',
+          ? 'Créez d\'abord un coupon — depuis un compte restaurateur, ou un coupon plateforme depuis Admin → Coupons.'
+          : 'Create a coupon first — from an owner account, or a platform coupon via Admin → Coupons.',
       )
       return
     }
-    Alert.alert(
-      lang === 'fr' ? 'Coupon de récompense' : 'Reward coupon',
-      lang === 'fr'
-        ? 'Choisissez le coupon offert au parrain et au filleul.'
-        : 'Choose the coupon issued to both the referrer and the new user.',
-      [
-        ...coupons.map(c => ({
-          text: `${lang === 'en' && c.title_en ? c.title_en : c.title_fr} — ${c.place_name}`,
-          onPress: () => save({ reward_coupon_id: c.id }),
-        })),
-        { text: lang === 'fr' ? 'Aucun' : 'None', onPress: () => save({ reward_coupon_id: null }), style: 'destructive' },
-        { text: lang === 'fr' ? 'Annuler' : 'Cancel', style: 'cancel' },
-      ],
-    )
+    setPickerSearch('')
+    setPickerOpen(true)
   }
 
   if (isLoading || !local) {
@@ -323,7 +314,7 @@ export default function AdminReferralsScreen() {
                 ? 'Ce coupon sera émis au parrain et au filleul. Chacun peut le réclamer une fois.'
                 : 'Issued to both the referrer and the new user. Each can redeem it once.'}
             </Text>
-            <Pressable style={styles.couponPicker} onPress={pickCoupon}>
+            <Pressable style={styles.couponPicker} onPress={openCouponPicker}>
               <Ionicons name="ticket-outline" size={18} color="#E8571A" />
               <Text style={styles.couponPickerText} numberOfLines={1}>
                 {selectedCoupon
@@ -343,6 +334,75 @@ export default function AdminReferralsScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Coupon picker modal — replaces the Alert.alert flow that breaks
+          past ~10 options. Searchable, scrollable, scales to hundreds. */}
+      <Modal
+        visible={pickerOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>
+              {lang === 'fr' ? 'Choisir le coupon' : 'Pick coupon'}
+            </Text>
+            <Pressable onPress={() => setPickerOpen(false)} hitSlop={12} style={styles.pickerClose}>
+              <Ionicons name="close" size={22} color="#1C1C1E" />
+            </Pressable>
+          </View>
+          <View style={styles.pickerSearchWrap}>
+            <Ionicons name="search-outline" size={16} color="#8E8E93" />
+            <TextInput
+              value={pickerSearch}
+              onChangeText={setPickerSearch}
+              placeholder={lang === 'fr' ? 'Rechercher titre ou restaurant…' : 'Search title or restaurant…'}
+              placeholderTextColor="#A3A3A8"
+              style={styles.pickerSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 6 }}>
+            <Pressable
+              onPress={() => { save({ reward_coupon_id: null }); setPickerOpen(false) }}
+              style={styles.pickerItem}
+            >
+              <Ionicons name="close-circle-outline" size={18} color="#FF3B30" />
+              <Text style={styles.pickerItemTitle}>
+                {lang === 'fr' ? 'Aucun coupon de récompense' : 'No reward coupon'}
+              </Text>
+            </Pressable>
+            {(coupons ?? [])
+              .filter(c => {
+                const q = pickerSearch.trim().toLowerCase()
+                if (!q) return true
+                const blob = `${c.title_fr} ${c.title_en ?? ''} ${c.place_name}`.toLowerCase()
+                return blob.includes(q)
+              })
+              .map(c => {
+                const active = local.reward_coupon_id === c.id
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => { save({ reward_coupon_id: c.id }); setPickerOpen(false) }}
+                    style={[styles.pickerItem, active && styles.pickerItemActive]}
+                  >
+                    <Ionicons name="ticket-outline" size={18} color={active ? '#E8571A' : '#6B6B70'} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.pickerItemTitle, active && styles.pickerItemTitleActive]} numberOfLines={1}>
+                        {lang === 'en' && c.title_en ? c.title_en : c.title_fr}
+                      </Text>
+                      <Text style={styles.pickerItemSub} numberOfLines={1}>{c.place_name}</Text>
+                    </View>
+                    {active && <Ionicons name="checkmark-circle" size={18} color="#E8571A" />}
+                  </Pressable>
+                )
+              })}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -492,4 +552,35 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,87,26,0.3)',
   },
   viewAllText: { color: '#E8571A', fontSize: 13, fontWeight: '700' },
+
+  pickerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 10,
+  },
+  pickerTitle: { fontSize: 17, fontWeight: '700', color: '#1C1C1E' },
+  pickerClose: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pickerSearchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginBottom: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: '#F8F8FA',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: '#E5E5EA',
+  },
+  pickerSearch: { flex: 1, fontSize: 14, color: '#1C1C1E', paddingVertical: 0 },
+  pickerItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#FAFAFA',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: '#E5E5EA',
+  },
+  pickerItemActive: { backgroundColor: 'rgba(232,87,26,0.06)', borderColor: 'rgba(232,87,26,0.4)' },
+  pickerItemTitle: { flex: 1, fontSize: 14, color: '#1C1C1E', fontWeight: '600' },
+  pickerItemTitleActive: { color: '#E8571A', fontWeight: '700' },
+  pickerItemSub: { fontSize: 11, color: '#6B6B70', marginTop: 2 },
 })

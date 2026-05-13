@@ -221,7 +221,7 @@ export interface Database {
       coupons: {
         Row: {
           id: string
-          place_id: string
+          place_id: string | null
           title_fr: string
           title_en: string | null
           description_fr: string | null
@@ -246,6 +246,16 @@ export interface Database {
           is_system?: boolean
         }
         Update: Partial<Database['public']['Tables']['coupons']['Insert']>
+        Relationships: []
+      }
+      coupon_places: {
+        Row: {
+          coupon_id: string
+          place_id: string
+          created_at: string
+        }
+        Insert: { coupon_id: string; place_id: string; created_at?: string }
+        Update: never
         Relationships: []
       }
       coupon_redemptions: {

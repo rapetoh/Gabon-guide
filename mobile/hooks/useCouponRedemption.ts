@@ -264,8 +264,9 @@ export interface MyCouponEntry {
   redemptionId: string
   redemptionCode: string
   couponId: string
-  placeId: string
-  placeName: string
+  // null = platform coupon, valid at any place (or any place in its scope)
+  placeId: string | null
+  placeName: string | null
   titleFr: string
   titleEn: string | null
   descriptionFr: string | null
@@ -273,6 +274,7 @@ export interface MyCouponEntry {
   discountType: 'percentage' | 'amount' | null
   discountValue: number | null
   expiresAt: string
+  isPlatform: boolean
 }
 
 export function useMyCoupons() {
@@ -282,6 +284,7 @@ export function useMyCoupons() {
     queryFn: async (): Promise<MyCouponEntry[]> => {
       if (!session) return []
       const nowIso = new Date().toISOString()
+      // Left-join on places so platform coupons (place_id NULL) are included.
       const { data, error } = await supabase
         .from('coupon_redemptions')
         .select(`
@@ -299,7 +302,7 @@ export function useMyCoupons() {
             is_active,
             starts_at,
             place_id,
-            place:places!inner ( id, name )
+            place:places ( id, name )
           )
         `)
         .eq('user_id', session.user.id)
@@ -323,27 +326,31 @@ export function useMyCoupons() {
           expires_at: string
           is_active: boolean
           starts_at: string
-          place_id: string
+          place_id: string | null
           place: { id: string; name: string } | null
         } | null
       }
       const rows = (data ?? []) as unknown as Row[]
       return rows
-        .filter(r => r.coupon && r.coupon.place)
-        .map(r => ({
-          redemptionId: r.id,
-          redemptionCode: r.redemption_code,
-          couponId: r.coupon!.id,
-          placeId: r.coupon!.place!.id,
-          placeName: r.coupon!.place!.name,
-          titleFr: r.coupon!.title_fr,
-          titleEn: r.coupon!.title_en,
-          descriptionFr: r.coupon!.description_fr,
-          descriptionEn: r.coupon!.description_en,
-          discountType: r.coupon!.discount_type,
-          discountValue: r.coupon!.discount_value,
-          expiresAt: r.coupon!.expires_at,
-        }))
+        .filter(r => r.coupon)
+        .map(r => {
+          const isPlatform = r.coupon!.place_id === null
+          return {
+            redemptionId: r.id,
+            redemptionCode: r.redemption_code,
+            couponId: r.coupon!.id,
+            placeId:   isPlatform ? null : (r.coupon!.place?.id ?? null),
+            placeName: isPlatform ? null : (r.coupon!.place?.name ?? null),
+            titleFr: r.coupon!.title_fr,
+            titleEn: r.coupon!.title_en,
+            descriptionFr: r.coupon!.description_fr,
+            descriptionEn: r.coupon!.description_en,
+            discountType: r.coupon!.discount_type,
+            discountValue: r.coupon!.discount_value,
+            expiresAt: r.coupon!.expires_at,
+            isPlatform,
+          }
+        })
         .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))
     },
     enabled: !!session,
