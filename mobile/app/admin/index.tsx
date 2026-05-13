@@ -76,26 +76,20 @@ export default function AdminDashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+      {/* Header — this page is about Places. Only Places-relevant
+          actions live here. All other admin domains (Coupons, Activity,
+          Referrals, Tier settings) are reached via Profile → Admin. */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="chevron-back" size={22} color="#1C1C1E" />
         </Pressable>
         <Text style={styles.title}>{lang === 'fr' ? 'Gestion' : 'Admin'}</Text>
         <View style={styles.headerActions}>
-          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/coupons' as any)}>
-            <Ionicons name="ticket-outline" size={20} color="#E8571A" />
-          </Pressable>
-          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/activity' as any)}>
-            <Ionicons name="time-outline" size={20} color="#E8571A" />
-          </Pressable>
-          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/referrals' as any)}>
-            <Ionicons name="gift-outline" size={20} color="#E8571A" />
-          </Pressable>
-          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/tier-settings' as any)}>
-            <Ionicons name="options-outline" size={20} color="#E8571A" />
-          </Pressable>
-          <Pressable style={styles.usersBtn} onPress={() => router.push('/admin/users' as any)}>
+          <Pressable
+            style={styles.usersBtn}
+            onPress={() => router.push('/admin/users' as any)}
+            hitSlop={6}
+          >
             <Ionicons name="people-outline" size={20} color="#E8571A" />
           </Pressable>
           <Pressable style={styles.addBtn} onPress={() => router.push('/admin/place/new')}>

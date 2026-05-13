@@ -327,7 +327,9 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Admin section — only visible to admins */}
+        {/* Admin section — only visible to admins. This is the home of
+            every admin domain. Each row is a separate management surface;
+            the page they open is self-contained. */}
         {isAdmin && (
           <View style={styles.settingsSection}>
             <Text style={styles.settingsHeader}>Admin</Text>
@@ -346,6 +348,42 @@ export default function ProfileScreen() {
               </View>
               <Text style={styles.rowLabel}>
                 {lang === 'fr' ? 'Gérer les utilisateurs' : 'Manage Users'}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+            </Pressable>
+            <Pressable style={styles.row} onPress={() => router.push('/admin/coupons' as any)}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
+                <Ionicons name="ticket-outline" size={18} color="#E8571A" />
+              </View>
+              <Text style={styles.rowLabel}>
+                {lang === 'fr' ? 'Coupons & promos' : 'Coupons & promos'}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+            </Pressable>
+            <Pressable style={styles.row} onPress={() => router.push('/admin/activity' as any)}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
+                <Ionicons name="time-outline" size={18} color="#E8571A" />
+              </View>
+              <Text style={styles.rowLabel}>
+                {lang === 'fr' ? 'Activité' : 'Activity'}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+            </Pressable>
+            <Pressable style={styles.row} onPress={() => router.push('/admin/referrals' as any)}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
+                <Ionicons name="gift-outline" size={18} color="#E8571A" />
+              </View>
+              <Text style={styles.rowLabel}>
+                {lang === 'fr' ? 'Parrainage' : 'Referrals'}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+            </Pressable>
+            <Pressable style={styles.row} onPress={() => router.push('/admin/tier-settings' as any)}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
+                <Ionicons name="options-outline" size={18} color="#E8571A" />
+              </View>
+              <Text style={styles.rowLabel}>
+                {lang === 'fr' ? 'Plans tarifaires' : 'Tier settings'}
               </Text>
               <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
             </Pressable>

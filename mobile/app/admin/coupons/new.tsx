@@ -380,7 +380,11 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: '#1C1C1E', paddingVertical: 0 },
 
-  placeList: { gap: 6, maxHeight: 320 },
+  // No maxHeight — the outer form ScrollView handles vertical scrolling.
+  // A maxHeight on a plain View doesn't scroll; it just clips the layout
+  // slot while the children spill into the next sibling (the Publish
+  // button), producing the overlap we hit.
+  placeList: { gap: 6 },
   placeRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 12, paddingVertical: 10,

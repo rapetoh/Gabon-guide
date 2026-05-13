@@ -102,8 +102,12 @@ export default function AdminCouponsList() {
         </Pressable>
       </View>
 
-      {/* Filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+      {/* Filters — plain row, no horizontal ScrollView. With a horizontal
+          ScrollView, children stretch to the cross-axis (vertical),
+          turning the chips into 600pt-tall capsules. flexWrap handles
+          the unlikely case of new filters pushing the count over what
+          fits on a single line. */}
+      <View style={styles.filterRow}>
         {([
           { k: 'all',      label: lang === 'fr' ? 'Tous'     : 'All' },
           { k: 'live',     label: lang === 'fr' ? 'Actifs'   : 'Live' },
@@ -122,7 +126,7 @@ export default function AdminCouponsList() {
             </Pressable>
           )
         })}
-      </ScrollView>
+      </View>
 
       {/* Search */}
       <View style={styles.searchWrap}>
@@ -266,7 +270,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  filterRow: { paddingHorizontal: 16, paddingBottom: 8, gap: 6 },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 6,
+  },
   filterBtn: {
     paddingHorizontal: 12, paddingVertical: 6,
     borderRadius: 999,
