@@ -64,6 +64,7 @@ export default {
           recordAudioAndroid: false,
         },
       ],
+      './plugins/withExpoCameraBarcodeScanning',
     ],
     scheme: 'okili',
     experiments: {

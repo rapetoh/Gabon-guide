@@ -36,6 +36,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [referralCode, setReferralCode] = useState('')
   const [loading, setLoading] = useState(false)
 
   function navigateAfterAuth() {
@@ -71,10 +72,21 @@ export default function LoginScreen() {
     setLoading(true)
     try {
       if (mode === 'register') {
+        const refTrimmed = referralCode.trim().toUpperCase()
+        // The handle_new_user trigger reads raw_user_meta_data.referral_code,
+        // links referred_by, and (if referral_settings allows) issues the
+        // reward coupon row for both the referrer and the new user. Invalid
+        // codes are silently ignored by the trigger — the signup still
+        // succeeds, just without a referral linkage.
         const { data, error } = await supabase.auth.signUp({
           email: emailTrimmed,
           password: passwordTrimmed,
-          options: { data: { full_name: fullName.trim() || null } },
+          options: {
+            data: {
+              full_name: fullName.trim() || null,
+              ...(refTrimmed ? { referral_code: refTrimmed } : {}),
+            },
+          },
         })
         if (error) throw error
 
@@ -271,6 +283,19 @@ export default function LoginScreen() {
             autoComplete={isLogin ? 'current-password' : 'new-password'}
             textContentType={isLogin ? 'password' : 'newPassword'}
           />
+
+          {!isLogin && (
+            <TextInput
+              style={styles.input}
+              placeholder={t('auth.referralCode') ?? 'Referral code (optional)'}
+              placeholderTextColor={colors.textPlaceholder}
+              value={referralCode}
+              onChangeText={(v) => setReferralCode(v.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={12}
+            />
+          )}
 
           {isLogin && (
             <Pressable style={styles.forgotBtn} onPress={handleForgotPassword} disabled={loading}>

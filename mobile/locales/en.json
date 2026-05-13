@@ -96,7 +96,19 @@
     "checkEmailHint": "We sent a confirmation link to your address. Click it to activate your account.",
     "resetSent": "Email sent",
     "resetSentHint": "We sent a password reset link to your address.",
-    "enterEmailFirst": "Enter your email address above, then tap \"Forgot password\"."
+    "enterEmailFirst": "Enter your email address above, then tap \"Forgot password\".",
+    "referralCode": "Referral code (optional)"
+  },
+  "referral": {
+    "title": "Referral",
+    "yourCode": "Your referral code",
+    "yourCodeHint": "Share this code with friends. When they sign up, you both earn a coupon.",
+    "share": "Share",
+    "copy": "Copy",
+    "copied": "Code copied",
+    "invited": "{{count}} friend invited",
+    "invited_plural": "{{count}} friends invited",
+    "shareMessage": "Check out O'Kili — Libreville's local-deals app. Use my code {{code}} at signup."
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

@@ -12,7 +12,17 @@ interface CouponRow {
   is_active: boolean
   is_system: boolean
   created_at: string
+  max_redemptions_per_user: number
+  max_total_redemptions: number | null
+  discount_type: 'percentage' | 'amount' | null
+  discount_value: number | null
   places: { id: string; name: string; subscription_tier: string } | null
+}
+
+function formatDiscount(c: CouponRow): string | null {
+  if (c.discount_type === null || c.discount_value === null) return null
+  if (c.discount_type === 'percentage') return `-${c.discount_value}%`
+  return `-${c.discount_value.toLocaleString('fr-FR')} FCFA`
 }
 
 interface RedemptionAggregate {
@@ -32,7 +42,7 @@ export default async function AdminCouponsPage({
 
   let q = supabase
     .from('coupons')
-    .select('id, place_id, title_fr, title_en, starts_at, expires_at, is_active, is_system, created_at, places(id, name, subscription_tier)')
+    .select('id, place_id, title_fr, title_en, starts_at, expires_at, is_active, is_system, created_at, max_redemptions_per_user, max_total_redemptions, discount_type, discount_value, places(id, name, subscription_tier)')
     .order('created_at', { ascending: false })
 
   const nowIso = new Date().toISOString()
@@ -123,10 +133,11 @@ export default async function AdminCouponsPage({
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Coupon</th>
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Place</th>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Discount</th>
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Status</th>
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Expires</th>
-                  <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Generated</th>
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Redeemed</th>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Quota</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -149,17 +160,40 @@ export default async function AdminCouponsPage({
                         ) : '—'}
                       </td>
                       <td className="px-5 py-3">
+                        {formatDiscount(c) ? (
+                          <span className="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
+                            {formatDiscount(c)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
                         <StatusPill status={status} />
                       </td>
                       <td className="px-5 py-3 text-gray-500">
                         {new Date(c.expires_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </td>
-                      <td className="px-5 py-3 text-gray-500">{agg.total}</td>
                       <td className="px-5 py-3">
                         <span className={`font-semibold ${agg.redeemed > 0 ? 'text-green-600' : 'text-gray-400'}`}>
                           {agg.redeemed}
                         </span>
-                        <span className="text-gray-400"> / {agg.total}</span>
+                        <span className="text-gray-400"> / {agg.total} generated</span>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-gray-500">
+                        {c.max_total_redemptions !== null ? (
+                          <span className={agg.redeemed >= c.max_total_redemptions ? 'text-red-600 font-semibold' : ''}>
+                            {agg.redeemed} / {c.max_total_redemptions}
+                            {agg.redeemed >= c.max_total_redemptions && ' · Sold out'}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">Unlimited</span>
+                        )}
+                        {c.max_redemptions_per_user > 1 && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">
+                            max {c.max_redemptions_per_user}/customer
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )

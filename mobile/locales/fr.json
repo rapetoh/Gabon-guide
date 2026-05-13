@@ -96,7 +96,19 @@
     "checkEmailHint": "Nous avons envoyé un lien de confirmation à votre adresse. Cliquez dessus pour activer votre compte.",
     "resetSent": "Email envoyé",
     "resetSentHint": "Nous avons envoyé un lien de réinitialisation à votre adresse.",
-    "enterEmailFirst": "Entrez votre adresse email ci-dessus, puis appuyez sur \"Mot de passe oublié\"."
+    "enterEmailFirst": "Entrez votre adresse email ci-dessus, puis appuyez sur \"Mot de passe oublié\".",
+    "referralCode": "Code de parrainage (optionnel)"
+  },
+  "referral": {
+    "title": "Parrainage",
+    "yourCode": "Votre code de parrainage",
+    "yourCodeHint": "Partagez ce code avec vos amis. À leur inscription, vous gagnez tous les deux un coupon.",
+    "share": "Partager",
+    "copy": "Copier",
+    "copied": "Code copié",
+    "invited": "{{count}} ami invité",
+    "invited_plural": "{{count}} amis invités",
+    "shareMessage": "Découvre O'Kili, l'app des bons plans à Libreville. Utilise mon code {{code}} à l'inscription."
   },
   "errors": {
     "generic": "Une erreur est survenue. Veuillez réessayer.",

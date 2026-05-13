@@ -214,6 +214,18 @@ export default function RestaurantAdminDashboard() {
               <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
             </Pressable>
           )}
+
+          {/* History — open to all tiers, shows redemptions at this place */}
+          <Pressable
+            style={[styles.actionBtn, { backgroundColor: colors.surfaceElevated }]}
+            onPress={() => router.push('/restaurant-admin/history' as any)}
+          >
+            <Ionicons name="receipt-outline" size={22} color="#E8571A" />
+            <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
+              {lang === 'fr' ? 'Historique' : 'History'}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+          </Pressable>
         </View>
 
         {/* Locked features above the owner's tier */}

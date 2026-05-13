@@ -4,20 +4,43 @@ import { router } from 'expo-router'
 import AppBackground from '../../components/AppBackground'
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext'
 import { useTranslation } from 'react-i18next'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
+  Modal,
   Pressable,
+  ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import QRCode from 'react-native-qrcode-svg'
 
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { useSession } from '../../hooks/useSession'
 import { useProfile } from '../../hooks/useProfile'
+import { useMyReferral } from '../../hooks/useReferrals'
+import { useCreditBalance } from '../../hooks/useCredit'
+import { encodeCreditQrPayload, useMyCoupons, type MyCouponEntry } from '../../hooks/useCouponRedemption'
 import { supabase } from '../../lib/supabase'
 import { ThemeColors, AppTheme } from '../../constants/themes'
+
+function formatFcfa(n: number, lang: 'fr' | 'en'): string {
+  return `${n.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} FCFA`
+}
+
+function discountLabel(c: MyCouponEntry, lang: 'fr' | 'en'): string | null {
+  if (c.discountType === null || c.discountValue === null) return null
+  if (c.discountType === 'percentage') return `-${c.discountValue}%`
+  return `-${formatFcfa(c.discountValue, lang)}`
+}
+
+function formatExpiry(iso: string, lang: 'fr' | 'en'): string {
+  return new Date(iso).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
+    day: 'numeric', month: 'short',
+  })
+}
 
 const THEME_OPTIONS: { key: AppTheme; labelFr: string; labelEn: string }[] = [
   { key: 'clean',   labelFr: 'Clair',   labelEn: 'Light'  },
@@ -32,15 +55,38 @@ export default function ProfileScreen() {
   const colors = useThemeColors()
   const { isAdmin, role } = useIsAdmin()
   const { displayName, avatarUrl } = useProfile()
+  const { data: referral } = useMyReferral()
+  const { data: credit } = useCreditBalance()
+  const { data: myCoupons } = useMyCoupons()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
 
   const styles = useMemo(() => createStyles(colors), [colors])
 
+  const [creditQrOpen, setCreditQrOpen] = useState(false)
+
+  const creditBalance = credit?.balance_fcfa ?? 0
+  const creditQrPayload = session?.user.id ? encodeCreditQrPayload({ userId: session.user.id }) : null
+
   const handleLogout = () => supabase.auth.signOut()
+
+  async function handleShareReferral() {
+    if (!referral?.code) return
+    try {
+      await Share.share({
+        message: t('referral.shareMessage', { code: referral.code }),
+      })
+    } catch {
+      // User cancelled — silent
+    }
+  }
 
   return (
     <AppBackground>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+        >
         <Text style={styles.title}>{lang === 'fr' ? 'Profil' : 'Profile'}</Text>
 
         {session ? (
@@ -134,10 +180,128 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Welcome credit + referral combined card.
+            Surfaced whenever the user is signed in and either has credit
+            or a referral code to share. */}
+        {session && (creditBalance > 0 || referral?.code) && (
+          <View style={styles.creditCard}>
+            <View style={styles.creditHeader}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
+                <Ionicons name="gift" size={18} color="#E8571A" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.creditLabel}>
+                  {lang === 'fr' ? 'Crédit O\'Kili' : 'O\'Kili credit'}
+                </Text>
+                <Text style={styles.creditAmount}>
+                  {formatFcfa(creditBalance, lang)}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.creditHint}>
+              {creditBalance > 0
+                ? (lang === 'fr'
+                    ? 'À utiliser dans n\'importe quel restaurant O\'Kili. Montrez votre QR au moment de payer.'
+                    : 'Spend it at any O\'Kili restaurant. Show your QR when paying.')
+                : (lang === 'fr'
+                    ? 'Invitez un ami avec votre code pour gagner du crédit utilisable partout.'
+                    : 'Invite a friend with your code to earn credit you can spend anywhere.')}
+            </Text>
+            <View style={styles.creditActions}>
+              {creditBalance > 0 && creditQrPayload && (
+                <Pressable onPress={() => setCreditQrOpen(true)} style={styles.creditPrimaryBtn}>
+                  <Ionicons name="qr-code-outline" size={16} color="#fff" />
+                  <Text style={styles.creditPrimaryBtnText}>
+                    {lang === 'fr' ? 'Mon QR de crédit' : 'My credit QR'}
+                  </Text>
+                </Pressable>
+              )}
+              {referral?.code && (
+                <Pressable onPress={handleShareReferral} style={[styles.creditSecondaryBtn, creditBalance === 0 && styles.creditPrimaryBtn]}>
+                  <Ionicons name="share-outline" size={16} color={creditBalance === 0 ? '#fff' : '#E8571A'} />
+                  <Text style={[styles.creditSecondaryBtnText, creditBalance === 0 && styles.creditPrimaryBtnText]}>
+                    {lang === 'fr' ? 'Partager mon code' : 'Share my code'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+            {referral?.code && (
+              <Text style={styles.creditFootnote}>
+                {lang === 'fr' ? 'Code : ' : 'Code: '}
+                <Text style={styles.creditCodeMono}>{referral.code}</Text>
+                {' · '}
+                {t('referral.invited', { count: referral.invitedCount })}
+              </Text>
+            )}
+            <Pressable
+              onPress={() => router.push('/account/activity' as any)}
+              style={styles.creditActivityLink}
+            >
+              <Ionicons name="time-outline" size={14} color="#E8571A" />
+              <Text style={styles.creditActivityLinkText}>
+                {lang === 'fr' ? 'Voir mon activité' : 'View my activity'}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#E8571A" />
+            </Pressable>
+          </View>
+        )}
+
+        {/* My coupons — every unredeemed coupon the user holds. Closes the
+            discoverability gap for coupons earned without visiting the place. */}
+        {session && myCoupons && myCoupons.length > 0 && (
+          <View style={styles.myCouponsSection}>
+            <Text style={styles.myCouponsHeader}>
+              {lang === 'fr' ? 'Mes coupons' : 'My coupons'}
+            </Text>
+            <View style={{ gap: 10 }}>
+              {myCoupons.map(c => (
+                <Pressable
+                  key={c.redemptionId}
+                  style={styles.myCouponCard}
+                  onPress={() => router.push(`/place/${c.placeId}` as any)}
+                >
+                  <View style={styles.myCouponBorder} />
+                  <View style={styles.myCouponBody}>
+                    <View style={styles.myCouponTop}>
+                      <Text style={styles.myCouponPlace} numberOfLines={1}>{c.placeName}</Text>
+                      {discountLabel(c, lang) && (
+                        <View style={styles.myCouponDiscount}>
+                          <Text style={styles.myCouponDiscountText}>{discountLabel(c, lang)}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.myCouponTitle} numberOfLines={2}>
+                      {lang === 'en' && c.titleEn ? c.titleEn : c.titleFr}
+                    </Text>
+                    <Text style={styles.myCouponMeta}>
+                      {lang === 'fr' ? 'Expire le ' : 'Until '}{formatExpiry(c.expiresAt, lang)}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} style={styles.myCouponChevron} />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* Restaurant owner section */}
         {role === 'restaurant_owner' && (
           <View style={styles.settingsSection}>
             <Text style={styles.settingsHeader}>{lang === 'fr' ? 'Mon restaurant' : 'My Restaurant'}</Text>
+            <Pressable style={styles.row} onPress={() => router.push('/restaurant-admin/scanner' as any)}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.12)' }]}>
+                <Ionicons name="scan" size={18} color="#E8571A" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowLabel}>
+                  {lang === 'fr' ? 'Scanner un coupon' : 'Scan a coupon'}
+                </Text>
+                <Text style={styles.rowSub}>
+                  {lang === 'fr' ? 'Valider les coupons et crédits des clients' : 'Validate customer coupons and credits'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+            </Pressable>
             <Pressable style={styles.row} onPress={() => router.push('/restaurant-admin' as any)}>
               <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
                 <Ionicons name="storefront-outline" size={18} color="#E8571A" />
@@ -191,7 +355,45 @@ export default function ProfileScreen() {
           <Ionicons name="shield-checkmark-outline" size={16} color="#34C759" />
           <Text style={styles.qualityText}>{t('quality.promise')}</Text>
         </View>
+        </ScrollView>
       </SafeAreaView>
+
+      {/* Credit QR modal — shown when the user taps "My credit QR".
+          The owner scans this at checkout to pull the user's credit
+          balance into the redemption session. */}
+      <Modal
+        visible={creditQrOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreditQrOpen(false)}
+      >
+        <Pressable style={styles.qrBackdrop} onPress={() => setCreditQrOpen(false)}>
+          <Pressable style={styles.qrCard} onPress={() => {/* swallow */}}>
+            <Pressable onPress={() => setCreditQrOpen(false)} style={styles.qrCloseBtn} hitSlop={12}>
+              <Ionicons name="close" size={22} color={colors.textPrimary} />
+            </Pressable>
+            <View style={styles.qrIconWrap}>
+              <Ionicons name="gift" size={22} color="#E8571A" />
+            </View>
+            <Text style={[styles.qrTitle, { color: colors.textPrimary }]}>
+              {lang === 'fr' ? 'Mon crédit O\'Kili' : 'My O\'Kili credit'}
+            </Text>
+            <Text style={styles.qrAmount}>
+              {formatFcfa(creditBalance, lang)}
+            </Text>
+            <View style={styles.qrBg}>
+              {creditQrPayload && (
+                <QRCode value={creditQrPayload} size={220} backgroundColor="#fff" color="#000" />
+              )}
+            </View>
+            <Text style={[styles.qrInstruction, { color: colors.textSecondary }]}>
+              {lang === 'fr'
+                ? 'Présentez ce QR au restaurant. Le serveur le scannera pour appliquer votre crédit à votre addition.'
+                : 'Show this QR at the restaurant. The waiter scans it to apply your credit to the bill.'}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </AppBackground>
   )
 }
@@ -412,6 +614,183 @@ function createStyles(c: ThemeColors) {
       fontSize: 13,
       color: c.textPrimary,
       lineHeight: 18,
+    },
+    // ── Welcome credit / referral card ─────────────────────────
+    creditCard: {
+      marginHorizontal: 24,
+      marginBottom: 16,
+      padding: 16,
+      borderRadius: 16,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.surfaceBorder,
+      gap: 12,
+    },
+    creditHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    creditLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: c.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    creditAmount: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: '#E8571A',
+      marginTop: 2,
+    },
+    creditHint: {
+      fontSize: 12,
+      color: c.textSecondary,
+      lineHeight: 17,
+    },
+    creditActions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    creditPrimaryBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: '#E8571A',
+      paddingVertical: 10,
+      borderRadius: 999,
+    },
+    creditPrimaryBtnText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    creditSecondaryBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(232,87,26,0.4)',
+      backgroundColor: 'rgba(232,87,26,0.06)',
+      paddingVertical: 10,
+      borderRadius: 999,
+    },
+    creditSecondaryBtnText: {
+      color: '#E8571A',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    creditFootnote: {
+      fontSize: 11,
+      color: c.textSecondary,
+      fontWeight: '500',
+    },
+    creditCodeMono: {
+      fontWeight: '800',
+      color: '#E8571A',
+      letterSpacing: 1,
+    },
+    creditActivityLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingVertical: 6,
+      marginTop: 2,
+    },
+    creditActivityLinkText: {
+      color: '#E8571A',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    // ── My coupons section ─────────────────────────────────────
+    myCouponsSection: {
+      marginHorizontal: 24,
+      marginBottom: 16,
+      gap: 10,
+    },
+    myCouponsHeader: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      paddingHorizontal: 4,
+    },
+    myCouponCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.surfaceBorder,
+      borderRadius: 14,
+      overflow: 'hidden',
+    },
+    myCouponBorder: { width: 4, alignSelf: 'stretch', backgroundColor: '#E8571A' },
+    myCouponBody: { flex: 1, paddingVertical: 12, paddingHorizontal: 14, gap: 4 },
+    myCouponTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    myCouponPlace: { flex: 1, fontSize: 12, fontWeight: '700', color: c.textPrimary, textTransform: 'uppercase', letterSpacing: 0.4 },
+    myCouponDiscount: {
+      backgroundColor: 'rgba(232,87,26,0.12)',
+      paddingHorizontal: 8, paddingVertical: 2,
+      borderRadius: 999,
+    },
+    myCouponDiscountText: { color: '#E8571A', fontSize: 11, fontWeight: '700' },
+    myCouponTitle: { fontSize: 14, fontWeight: '600', color: c.textPrimary, lineHeight: 18 },
+    myCouponMeta: { fontSize: 11, color: c.textSecondary, marginTop: 2 },
+    myCouponChevron: { marginRight: 10 },
+
+    // ── Credit QR modal ────────────────────────────────────────
+    qrBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    qrCard: {
+      width: '100%',
+      maxWidth: 360,
+      backgroundColor: c.bgPrimary,
+      borderRadius: 22,
+      padding: 22,
+      paddingTop: 28,
+      alignItems: 'center',
+      gap: 12,
+    },
+    qrCloseBtn: {
+      position: 'absolute',
+      top: 12, right: 12,
+      width: 30, height: 30,
+      borderRadius: 15,
+      backgroundColor: 'rgba(0,0,0,0.06)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    qrIconWrap: {
+      width: 44, height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(232,87,26,0.1)',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    qrTitle: { fontSize: 16, fontWeight: '700' },
+    qrAmount: { fontSize: 22, fontWeight: '800', color: '#E8571A' },
+    qrBg: {
+      backgroundColor: '#fff',
+      padding: 12,
+      borderRadius: 16,
+    },
+    qrInstruction: {
+      fontSize: 12,
+      lineHeight: 17,
+      textAlign: 'center',
+      maxWidth: 280,
     },
   })
 }

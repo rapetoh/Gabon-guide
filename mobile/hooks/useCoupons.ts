@@ -13,6 +13,9 @@ export interface Coupon {
   starts_at: string
   expires_at: string
   max_redemptions_per_user: number
+  max_total_redemptions: number | null
+  discount_type: 'percentage' | 'amount' | null
+  discount_value: number | null
   is_active: boolean
   is_system: boolean
   created_at: string
@@ -68,6 +71,9 @@ interface CouponInput {
   starts_at?: string  // ISO; defaults to now() server-side
   expires_at: string  // ISO
   max_redemptions_per_user?: number
+  max_total_redemptions?: number | null
+  discount_type?: 'percentage' | 'amount' | null
+  discount_value?: number | null
   is_active?: boolean
 }
 
@@ -84,6 +90,9 @@ export function useCreateCoupon() {
         starts_at: input.starts_at,
         expires_at: input.expires_at,
         max_redemptions_per_user: input.max_redemptions_per_user ?? 1,
+        max_total_redemptions: input.max_total_redemptions ?? null,
+        discount_type: input.discount_type ?? null,
+        discount_value: input.discount_value ?? null,
         is_active: input.is_active ?? true,
         is_system: false,
       })

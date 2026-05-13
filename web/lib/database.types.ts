@@ -229,13 +229,19 @@ export interface Database {
           starts_at: string
           expires_at: string
           max_redemptions_per_user: number
+          max_total_redemptions: number | null
+          discount_type: 'percentage' | 'amount' | null
+          discount_value: number | null
           is_active: boolean
           is_system: boolean
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['coupons']['Row'], 'id' | 'created_at' | 'starts_at' | 'max_redemptions_per_user' | 'is_active' | 'is_system'> & {
+        Insert: Omit<Database['public']['Tables']['coupons']['Row'], 'id' | 'created_at' | 'starts_at' | 'max_redemptions_per_user' | 'max_total_redemptions' | 'discount_type' | 'discount_value' | 'is_active' | 'is_system'> & {
           starts_at?: string
           max_redemptions_per_user?: number
+          max_total_redemptions?: number | null
+          discount_type?: 'percentage' | 'amount' | null
+          discount_value?: number | null
           is_active?: boolean
           is_system?: boolean
         }
@@ -249,26 +255,59 @@ export interface Database {
           user_id: string | null
           redemption_code: string
           redeemed_at: string | null
+          bill_amount: number | null
+          discount_applied: number | null
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['coupon_redemptions']['Row'], 'id' | 'created_at' | 'redeemed_at'> & {
+        Insert: Omit<Database['public']['Tables']['coupon_redemptions']['Row'], 'id' | 'created_at' | 'redeemed_at' | 'bill_amount' | 'discount_applied'> & {
           redeemed_at?: string | null
+          bill_amount?: number | null
+          discount_applied?: number | null
         }
-        Update: Partial<Pick<Database['public']['Tables']['coupon_redemptions']['Row'], 'redeemed_at'>>
+        Update: Partial<Pick<Database['public']['Tables']['coupon_redemptions']['Row'], 'redeemed_at' | 'bill_amount' | 'discount_applied'>>
         Relationships: []
       }
       referral_settings: {
         Row: {
           id: number
-          reward_type: 'coupon' | 'points' | 'none'
+          reward_type: 'welcome_credit' | 'coupon' | 'points' | 'none'
           referrer_reward_value: number
           referee_reward_value: number
           reward_coupon_id: string | null
+          reward_credit_fcfa: number | null
           is_active: boolean
           updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['referral_settings']['Row']> & { id?: number }
         Update: Partial<Database['public']['Tables']['referral_settings']['Row']>
+        Relationships: []
+      }
+      credit_balances: {
+        Row: {
+          user_id: string
+          balance_fcfa: number
+          lifetime_earned: number
+          updated_at: string
+        }
+        Insert: { user_id: string; balance_fcfa?: number; lifetime_earned?: number; updated_at?: string }
+        Update: Partial<Database['public']['Tables']['credit_balances']['Row']>
+        Relationships: []
+      }
+      credit_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          delta_fcfa: number
+          reason: 'referral_signup' | 'referral_invite' | 'redemption_session' | 'admin_adjust'
+          ref_id: string | null
+          place_id: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['credit_transactions']['Row'], 'id' | 'created_at'> & {
+          id?: string
+          created_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['credit_transactions']['Row']>
         Relationships: []
       }
       system_settings: {
@@ -308,6 +347,27 @@ export interface Database {
           email: string | null
           joined_at: string
         }[]
+      }
+      apply_redemption_session: {
+        Args: {
+          p_user_id: string
+          p_redemption_ids: string[]
+          p_credit_to_use: number
+          p_bill_amount: number
+          p_place_id: string
+        }
+        Returns: {
+          bill_amount: number
+          total_discount: number
+          credit_used: number
+          customer_pays: number
+          lines: {
+            redemption_id: string
+            coupon_id: string
+            bill_amount: number
+            discount_applied: number
+          }[]
+        }
       }
     }
   }

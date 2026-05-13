@@ -27,6 +27,7 @@ import {
   useDeleteCoupon,
   useUpdateCoupon,
 } from '../../hooks/useCoupons'
+import { useCouponUsage } from '../../hooks/useCouponRedemption'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { LockedFeatureCard } from '../../components/restaurant-admin/LockedFeatureCard'
@@ -69,6 +70,50 @@ function isCouponLive(c: Coupon) {
   return new Date(c.starts_at).getTime() <= now && new Date(c.expires_at).getTime() > now
 }
 
+function discountLabel(c: Coupon, lang: 'fr' | 'en'): string | null {
+  if (c.discount_type === null || c.discount_value === null) return null
+  if (c.discount_type === 'percentage') return `-${c.discount_value}%`
+  return `-${c.discount_value.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} FCFA`
+}
+
+function CouponInfoRow({ coupon, lang }: { coupon: Coupon; lang: 'fr' | 'en' }) {
+  const colors = useThemeColors()
+  const { data: usage } = useCouponUsage(coupon.id)
+  const label = discountLabel(coupon, lang)
+
+  const totalUsed = usage?.totalRedeemed ?? 0
+  const cap = coupon.max_total_redemptions
+  const soldOut = cap !== null && totalUsed >= cap
+
+  return (
+    <View style={[styles.usageRow, { flexWrap: 'wrap' }]}>
+      {label && (
+        <View style={styles.discountPill}>
+          <Ionicons name="pricetag" size={11} color="#E8571A" />
+          <Text style={styles.discountPillText}>{label}</Text>
+        </View>
+      )}
+      <Text style={[styles.usageText, { color: colors.textSecondary }]}>
+        {cap !== null
+          ? (lang === 'fr' ? `${totalUsed} / ${cap} utilisés` : `${totalUsed} / ${cap} used`)
+          : (lang === 'fr' ? `${totalUsed} utilisé(s)` : `${totalUsed} used`)}
+        {coupon.max_redemptions_per_user > 1
+          ? (lang === 'fr'
+              ? ` · max ${coupon.max_redemptions_per_user}/client`
+              : ` · max ${coupon.max_redemptions_per_user}/customer`)
+          : ''}
+      </Text>
+      {soldOut && (
+        <View style={styles.soldOutPill}>
+          <Text style={styles.soldOutText}>
+            {lang === 'fr' ? 'Épuisé' : 'Sold out'}
+          </Text>
+        </View>
+      )}
+    </View>
+  )
+}
+
 export default function RestaurantAdminCoupons() {
   const { i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
@@ -81,11 +126,16 @@ export default function RestaurantAdminCoupons() {
   const deleteCoupon = useDeleteCoupon(place?.id ?? '')
   const updateCoupon = useUpdateCoupon(place?.id ?? '')
 
+
   const [creating, setCreating] = useState(false)
   const [titleFr, setTitleFr] = useState('')
   const [titleEn, setTitleEn] = useState('')
   const [descFr, setDescFr] = useState('')
   const [expiresAt, setExpiresAt] = useState('')  // YYYY-MM-DD
+  const [maxPerUser, setMaxPerUser] = useState('1')
+  const [maxTotal, setMaxTotal] = useState('')  // empty = unlimited
+  const [discountType, setDiscountType] = useState<'none' | 'percentage' | 'amount'>('none')
+  const [discountValue, setDiscountValue] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const canCreate = tier.can('coupons_create')
@@ -95,6 +145,10 @@ export default function RestaurantAdminCoupons() {
     setTitleEn('')
     setDescFr('')
     setExpiresAt('')
+    setMaxPerUser('1')
+    setMaxTotal('')
+    setDiscountType('none')
+    setDiscountValue('')
   }
 
   async function handleCreate() {
@@ -115,6 +169,32 @@ export default function RestaurantAdminCoupons() {
       )
       return
     }
+
+    const perUser = Math.max(1, parseInt(maxPerUser, 10) || 1)
+    const total = maxTotal.trim() === '' ? null : Math.max(1, parseInt(maxTotal, 10) || 1)
+
+    let dtype: 'percentage' | 'amount' | null = null
+    let dvalue: number | null = null
+    if (discountType !== 'none') {
+      const v = parseInt(discountValue, 10)
+      if (!Number.isFinite(v) || v <= 0) {
+        Alert.alert(
+          lang === 'fr' ? 'Valeur de remise invalide' : 'Invalid discount value',
+          lang === 'fr' ? 'Entrez un nombre positif.' : 'Enter a positive number.'
+        )
+        return
+      }
+      if (discountType === 'percentage' && v > 100) {
+        Alert.alert(
+          lang === 'fr' ? 'Pourcentage invalide' : 'Invalid percentage',
+          lang === 'fr' ? 'Le pourcentage doit être entre 1 et 100.' : 'Percentage must be between 1 and 100.'
+        )
+        return
+      }
+      dtype = discountType
+      dvalue = v
+    }
+
     setSubmitting(true)
     try {
       await createCoupon.mutateAsync({
@@ -124,7 +204,10 @@ export default function RestaurantAdminCoupons() {
         description_fr: descFr.trim() || null,
         expires_at: exp.toISOString(),
         is_active: true,
-        max_redemptions_per_user: 1,
+        max_redemptions_per_user: perUser,
+        max_total_redemptions: total,
+        discount_type: dtype,
+        discount_value: dvalue,
       })
       resetForm()
       setCreating(false)
@@ -288,6 +371,95 @@ export default function RestaurantAdminCoupons() {
                     </View>
                   </View>
 
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>
+                      {lang === 'fr' ? 'Limite par client' : 'Per-customer limit'}
+                    </Text>
+                    <TextInput
+                      style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.surface }]}
+                      value={maxPerUser}
+                      onChangeText={(t) => setMaxPerUser(t.replace(/[^0-9]/g, ''))}
+                      keyboardType="number-pad"
+                      placeholder="1"
+                      placeholderTextColor={colors.textPlaceholder}
+                    />
+                    <Text style={[styles.helpText, { color: colors.textSecondary }]}>
+                      {lang === 'fr' ? 'Combien de fois un même client peut l\'utiliser.' : 'How many times a single customer can use it.'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>
+                      {lang === 'fr' ? 'Quota total' : 'Total quota'}
+                    </Text>
+                    <TextInput
+                      style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.surface }]}
+                      value={maxTotal}
+                      onChangeText={(t) => setMaxTotal(t.replace(/[^0-9]/g, ''))}
+                      keyboardType="number-pad"
+                      placeholder={lang === 'fr' ? 'Laisser vide pour illimité' : 'Leave empty for unlimited'}
+                      placeholderTextColor={colors.textPlaceholder}
+                    />
+                    <Text style={[styles.helpText, { color: colors.textSecondary }]}>
+                      {lang === 'fr'
+                        ? 'Une fois atteint, le coupon devient indisponible pour tous.'
+                        : 'Once reached, the coupon becomes unavailable to everyone.'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>
+                      {lang === 'fr' ? 'Type de remise' : 'Discount type'}
+                    </Text>
+                    <View style={styles.segmentRow}>
+                      {([
+                        { key: 'none' as const,        label: lang === 'fr' ? 'Aucune' : 'None' },
+                        { key: 'percentage' as const,  label: '%' },
+                        { key: 'amount' as const,      label: 'FCFA' },
+                      ]).map(opt => {
+                        const active = discountType === opt.key
+                        return (
+                          <Pressable
+                            key={opt.key}
+                            onPress={() => setDiscountType(opt.key)}
+                            style={[
+                              styles.segmentBtn,
+                              { backgroundColor: colors.surface },
+                              active && styles.segmentBtnActive,
+                            ]}
+                          >
+                            <Text style={[styles.segmentBtnText, active && styles.segmentBtnTextActive]}>
+                              {opt.label}
+                            </Text>
+                          </Pressable>
+                        )
+                      })}
+                    </View>
+                  </View>
+
+                  {discountType !== 'none' && (
+                    <View style={styles.field}>
+                      <Text style={[styles.label, { color: colors.textSecondary }]}>
+                        {discountType === 'percentage'
+                          ? (lang === 'fr' ? 'Pourcentage (1–100)' : 'Percentage (1–100)')
+                          : (lang === 'fr' ? 'Montant en FCFA' : 'Amount in FCFA')}
+                      </Text>
+                      <TextInput
+                        style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.surface }]}
+                        value={discountValue}
+                        onChangeText={(t) => setDiscountValue(t.replace(/[^0-9]/g, ''))}
+                        keyboardType="number-pad"
+                        placeholder={discountType === 'percentage' ? '20' : '5000'}
+                        placeholderTextColor={colors.textPlaceholder}
+                      />
+                      <Text style={[styles.helpText, { color: colors.textSecondary }]}>
+                        {lang === 'fr'
+                          ? 'Lorsque vous scannez le QR du client, ce montant sera déduit du total qu\'il vous indique.'
+                          : 'When you scan the customer\'s QR, this amount will be deducted from the bill they show you.'}
+                      </Text>
+                    </View>
+                  )}
+
                   <View style={styles.formActions}>
                     <Pressable
                       onPress={() => { resetForm(); setCreating(false) }}
@@ -377,6 +549,8 @@ export default function RestaurantAdminCoupons() {
                           </Text>
                         )}
 
+                        <CouponInfoRow coupon={c} lang={lang} />
+
                         <View style={styles.couponActions}>
                           <View style={styles.couponToggleRow}>
                             <Switch
@@ -455,6 +629,41 @@ const styles = StyleSheet.create({
   quickRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   quickBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   quickBtnText: { fontSize: 12, fontWeight: '600', color: '#3C3C43' },
+
+  helpText: { fontSize: 11, lineHeight: 15, marginTop: 4 },
+
+  segmentRow: { flexDirection: 'row', gap: 8 },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  segmentBtnActive: { backgroundColor: '#E8571A' },
+  segmentBtnText: { fontSize: 13, fontWeight: '600', color: '#3C3C43' },
+  segmentBtnTextActive: { color: '#fff' },
+
+  discountPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(232,87,26,0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  discountPillText: { color: '#E8571A', fontSize: 11, fontWeight: '700' },
+
+  usageRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  usageText: { fontSize: 11, fontWeight: '600' },
+  soldOutPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,59,48,0.12)',
+  },
+  soldOutText: { color: '#FF3B30', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
 
   formActions: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 4 },
   cancelBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },

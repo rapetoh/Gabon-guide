@@ -1308,3 +1308,465 @@ If founder reports that scanning still doesn't fire after `cac7ce1`:
 ### Memory / context references for the next session
 - `MEMORY.md` exists with: `project_prelaunce_checklist.md` (Gabon bounds check) and `project_architecture_decisions.md` (10+ entries pre-dating this work; tier work is logged here in PLAN.md, not in memory).
 - The founder's design reference archive (Eunice's friend) sits at `/tmp/okili-design/` from earlier in this session — it may be cleared on next restart. The design file the founder agreed to take inspiration from was `screens/web.jsx` in that archive (web/desktop only).
+
+---
+
+## 2026-05-10 (cont.) — Coupon scanner: real root cause + fix
+
+Founder switched sessions because previous context was nearly full. Confirmed at handoff: `cac7ce1` did not fix the in-app scanner — `[scanner] onBarcodeScanned event fired with data:` still never appeared in Metro after a reload of the iPhone with the new build.
+
+### Root cause (confirmed against expo-camera 55 source)
+
+Starting in expo-camera SDK 55, barcode scanning was split out of the main pod into a separate companion pod, **`ExpoCameraBarcodeScanning`**, that is **not registered with Expo autolinking**. Three smoking guns:
+
+1. `node_modules/expo-camera/expo-module.config.json` only registers `ExpoCamera.podspec` — autolinking never installs the companion.
+2. `node_modules/expo-camera/ios/ExpoCamera.podspec` line 27: `s.exclude_files = "barcode-scanning/**"` — main pod explicitly excludes the provider sources.
+3. `node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec` exists separately, depends on `ZXingObjC/PDF417` + `ZXingObjC/OneD`, and ships the `ExpoCameraZXingProvider` Swift class that the runtime looks up via `NSClassFromString("ExpoCameraZXingProvider")`.
+
+Confirmed missing from project:
+- `mobile/ios/Podfile.lock` lists `ExpoCamera` but no `ExpoCameraBarcodeScanning`.
+
+Native consequence — `mobile/node_modules/expo-camera/ios/Current/BarcodeScanner.swift`:
+```swift
+var isAvailable: Bool { return barcodeProvider != nil }
+func maybeStartBarcodeScanning() {
+  guard isScanningBarcodes else { return }
+  guard barcodeProvider != nil else { return }   // ← silently bails
+  ...
+}
+```
+
+With no provider linked, every scan attempt hits this guard and returns. No error. No log (other than the one-shot `Barcode scanning has been disabled` warning when settings are first applied — which the previous session saw and misattributed to JS prop-identity churn). Camera preview keeps working because preview doesn't go through the BarcodeScanner code path.
+
+QR specifically: even though the ZXing provider only registers PDF417 / Code39 / Codabar readers (not QR), the gate in `BarcodeScanner.maybeStartBarcodeScanning` is `barcodeProvider != nil`, not "provider supports this type." Once the provider exists, iOS's native `AVCaptureMetadataOutput` is what actually decodes QR codes. So linking the companion pod fixes QR scanning even though the pod's only purpose on paper is the ZXing-backed formats.
+
+### What the previous session got wrong
+
+Commit `28b0cfd` ("stable identity for CameraView props") and `fbaae85` ("ref-based onBarcodeScanned for truly stable identity") attributed the bug to prop-identity churn making expo-camera tear down its scanner pipeline. That theory is wrong — re-reading `CameraView.swift`, prop changes do not tear down the barcode pipeline. Stable refs are still a fine pattern (worth keeping for what it actually does — preventing stale closures over `state`), but they were not the fix.
+
+Commit `cac7ce1` ("drop the okili: URL scheme") addressed a different symptom — iOS native Camera app outside our app deep-linking the QR. That's unrelated to the in-app scanner. Kept as-is on purpose since the decoder still accepts both formats.
+
+### Fix shipped this session (uncommitted at time of writing)
+
+1. **New config plugin** — `mobile/plugins/withExpoCameraBarcodeScanning.js` — uses `withDangerousMod('ios', ...)` to append `pod 'ExpoCameraBarcodeScanning', :path => '../node_modules/expo-camera/ios'` to `ios/Podfile` during prebuild. Idempotent (checks for existing marker) and fails loudly if the anchor (`use_expo_modules!`) is missing.
+2. **`mobile/app.config.js`** — appended `'./plugins/withExpoCameraBarcodeScanning'` to the plugins array so prebuild picks it up.
+3. **`mobile/ios/Podfile`** — patched directly so the founder doesn't have to run a full `npx expo prebuild` to test. The plugin keeps it in sync if/when prebuild ever runs.
+4. **`mobile/app/restaurant-admin/scanner.tsx`** — removed the misleading "stable identity prevents barcode pipeline teardown" comments and the diagnostic `console.log` calls (no longer needed). Kept the ref-based handler structure (still correct, just for a different reason).
+
+### What the founder needs to run to activate the fix
+
+```bash
+cd /Users/roch/Desktop/Gabon-guide/mobile/ios
+pod install
+cd ..
+npx expo run:ios --device   # or --simulator if testing without iPhone
+```
+
+`pod install` is required — JS reload alone cannot pick up the missing native module. After the rebuild, `Podfile.lock` will list `ExpoCameraBarcodeScanning` and `ZXingObjC/{PDF417,OneD}`. From then on, `onBarcodeScanned` fires on QR detection.
+
+### Verification checklist after rebuild
+
+1. Open `restaurant-admin/scanner` on the iPhone build.
+2. Display a coupon QR on the simulator (user-side `place/[id]` → "Use" button).
+3. Point iPhone at simulator screen, frame inside reticle.
+4. Expected: success modal pops within ~1s, redemption row gets `redeemed_at` populated, second scan of the same QR shows "ALREADY_REDEEMED".
+
+If step 4 still fails after a clean rebuild, the next thing to check is the console log on the iPhone (Xcode → Devices → Senyo's iPhone → Open Console) for `Barcode scanning has been disabled` warnings or any `ZXingObjC` linker complaints.
+
+### Files touched
+- `mobile/plugins/withExpoCameraBarcodeScanning.js` (new)
+- `mobile/app.config.js` (plugin registration)
+- `mobile/ios/Podfile` (gitignored — patched directly so today's rebuild works)
+- `mobile/app/restaurant-admin/scanner.tsx` (comment cleanup)
+- `docs/PLAN.md` (this entry)
+
+### Post-fix: Podfile module-map error on first `pod install`
+
+Initial `pod install` failed with: *"The Swift pod `ExpoCameraBarcodeScanning` depends upon `ZXingObjC`, which does not define modules."* CocoaPods needs module maps for Swift to consume ObjC pods; ZXingObjC ships without them. Fixed by also adding `pod 'ZXingObjC/PDF417', :modular_headers => true` and `pod 'ZXingObjC/OneD', :modular_headers => true` to the Podfile, and updating `withExpoCameraBarcodeScanning.js` to inject all three lines so future prebuilds stay in sync.
+
+After the fix, `pod install` succeeded, the iPhone rebuild was clean, and **scanning fires reliably** — founder-confirmed on 2026-05-10.
+
+---
+
+## 2026-05-10 (cont.) — Coupons: quotas, discount value, bill capture, scan-result UX
+
+Continued the coupon work after scanning was unblocked. Founder asked for:
+1. **Per-user usage limit** — configurable, enforced.
+2. **Total quota** — coupon becomes unavailable after N total redemptions.
+3. **Discount value model** — owners declare the discount as a percentage or fixed FCFA amount on each coupon.
+4. **Bill amount capture at redeem time** — owner enters the customer's bill; app computes the discount; redemption row stores both for later analytics.
+5. **Scan UX change** — exit the camera as soon as a QR is detected; show the result modal on the coupons page (which is where the owner came from). User explicitly chose this over the in-camera result modal; ownership taken on the trade-off.
+6. **Show last redemption date/time** on the user-side card.
+7. **Customer info in scan result** — name + email of the customer whose QR was just scanned.
+
+### Migration 016 (applied to OKiLi Supabase project via MCP)
+
+`supabase/migrations/016_coupons_quota_and_value.sql`:
+- `coupons.max_total_redemptions int` — nullable = unlimited; CHECK `> 0` when set.
+- `coupons.discount_type text` — `'percentage' | 'amount'` — nullable for "no math" coupons.
+- `coupons.discount_value int` — % (1-100) or FCFA amount; CHECK constraints enforce pairing with `discount_type` and valid range per type.
+- `coupon_redemptions.bill_amount int` — nullable, FCFA, captured by owner at redeem time. CHECK `>= 0`.
+- `coupon_redemptions.discount_applied int` — nullable, FCFA, computed at redeem time. CHECK `>= 0`.
+- Partial index `coupon_redemptions_redeemed_idx (coupon_id, user_id) WHERE redeemed_at IS NOT NULL` — supports fast quota counts.
+
+### Hook layer
+
+`mobile/hooks/useCouponRedemption.ts` rewritten:
+- New exports: `REDEMPTION_ERRORS` (string union for thrown error keys), `useCouponUsage`, `useLastUserRedemption`, `useScanContext`.
+- `useUserRedemption` now returns only **unredeemed** rows (so multi-use coupons can have multiple historical rows and the live QR shows the open one). `useLastUserRedemption` is the new accessor for "last redeemed" date display.
+- `useStartRedemption` enforces total quota + per-user limit + active/expired status **before** creating a new row. Reuses the user's open unredeemed row when one exists (single live QR per user/coupon at a time).
+- `useRedeemCode` now accepts `billAmount?: number`. Re-checks quotas defensively (concurrent redemptions could push the coupon over the limit between QR generation and owner scan). Computes `discount_applied` from coupon's `discount_type`/`discount_value` and the supplied bill, capped at the bill amount.
+- `useScanContext(couponId, code)` returns coupon + redemption row + customer profile + current usage counts in a single query bundle — feeds the new scan modal.
+
+### Owner UI
+
+`mobile/app/restaurant-admin/coupons.tsx`:
+- Create form gained: per-customer limit, total quota (empty = unlimited), discount type segmented control (None / % / FCFA), discount value input with type-aware placeholder + validation (% capped at 100, FCFA positive).
+- Each coupon card now shows a `CouponInfoRow`: discount pill + `X / Y used` or `X used` + "Sold out" badge when applicable.
+- Picks up `scanCouponId` + `scanCode` from route params (`useLocalSearchParams`), opens `ScanResultModal`, then strips the params so reopening the page doesn't replay the modal.
+
+`mobile/components/restaurant-admin/ScanResultModal.tsx` (new):
+- Single component renders four modes: loading / error / ready-to-redeem / success.
+- Error modes cover CODE_NOT_FOUND, COUPON_INACTIVE_OR_EXPIRED, COUPON_SOLD_OUT, PER_USER_LIMIT_REACHED, ALREADY_REDEEMED (with last-redeem date/time), and a fallback for unknown errors.
+- Ready mode shows customer name + email, current usage count, an optional bill input (only if the coupon has a discount), and live "Customer pays: X FCFA" math as the owner types.
+- Success mode echoes the customer card + final amounts so the owner has a moment of confirmation.
+
+`mobile/app/restaurant-admin/scanner.tsx` rewritten:
+- On QR decode, immediately `router.replace('/restaurant-admin/coupons', { scanCouponId, scanCode })`. No in-camera result modal anymore.
+- Sets `CameraView active={false}` during the route transition + dims overlay so it doesn't keep firing scans during the handoff.
+- All the redemption logic moved out — scanner is now purely a decode-and-handoff screen.
+
+### User-facing changes
+
+`mobile/components/place/CouponsBlock.tsx` rewritten:
+- Discount pill in the card header when set.
+- "Used X / N" and "Last used: 12 May 2026, 14:32" surfaced on the card whenever the user has any redemption history or the per-user max is > 1.
+- Button states: **Sold out** (grey, disabled), **Limit reached** (green, disabled, shown after they've hit their per-user cap), **Use this coupon** / **Use again** (orange).
+- QR modal handles `useStartRedemption` errors (sold out, limit reached, inactive) inline with a clear message instead of failing silently.
+
+### Web admin
+
+`web/app/admin/coupons/page.tsx`: added Discount column, separate Quota column showing `X / max_total · Sold out` when applicable, and a "max N/customer" sub-line when `max_redemptions_per_user > 1`. "Redeemed" column now shows "X / Y generated" for clarity.
+
+### Types
+
+Mobile `database.types.ts` updated; `cp`'d to `web/lib/database.types.ts` so both apps stay in sync (hand-written, not generated). `Coupon` interface in `useCoupons.ts` extended with the new fields.
+
+### tsc
+
+Both mobile + web `npx tsc --noEmit` clean (modulo the pre-existing `@expo/vector-icons` resolver warning).
+
+### Files touched / created
+- `supabase/migrations/016_coupons_quota_and_value.sql` (new, applied)
+- `mobile/lib/database.types.ts` + `web/lib/database.types.ts` (kept in sync)
+- `mobile/hooks/useCoupons.ts`
+- `mobile/hooks/useCouponRedemption.ts` (large rewrite)
+- `mobile/app/restaurant-admin/coupons.tsx`
+- `mobile/app/restaurant-admin/scanner.tsx` (full rewrite — decode + handoff only)
+- `mobile/components/restaurant-admin/ScanResultModal.tsx` (new)
+- `mobile/components/place/CouponsBlock.tsx` (rewrite)
+- `web/app/admin/coupons/page.tsx`
+- `docs/PLAN.md` (this entry)
+
+### What changes for the next session
+- Scanner flow now exits the camera on detection — if you need to test the scanner again, expect to land back on the coupons page with a modal, not see a modal stacked on the live camera. This is intentional, by founder's design call.
+- `useUserRedemption` now returns ONLY unredeemed rows — any caller relying on it to detect "ever-redeemed" needs to switch to `useLastUserRedemption` or `useCouponUsage`.
+- All quota checks are client-side at the moment. For tighter race-condition safety later (e.g., two devices redeeming simultaneously at the exact moment of the last quota slot), a Postgres function with row locking would be the upgrade — but at MVP scale this is acceptable.
+- Bill amount input is **optional**: owners can skip it and still mark the coupon redeemed. `bill_amount` and `discount_applied` will be null on the row. Decision documented in this session per founder go-ahead.
+
+---
+
+## 2026-05-10 (cont.) — Step 8: Referrals end-to-end
+
+Founder confirmed Step 7 (coupons) was working as intended (single QR per active redemption; quotas, discount math, bill capture all good). Moved to Step 8 per the original 2026-05-06 roadmap.
+
+### What ships
+
+- New users can enter a friend's **referral code** at signup. If valid, the link is recorded (`profiles.referred_by`) AND both parties receive the admin-configured reward.
+- Reward is a **coupon** for MVP (points are post-MVP per founder decision in 2026-05-06 entry). Admin picks one currently-active coupon from any place; the signup trigger issues an unredeemed `coupon_redemptions` row to each side. The reward surfaces automatically on the place page because `useStartRedemption` already returns the existing unredeemed row.
+- Every user has an auto-generated unique 8-char referral code (already done by migration 014's `set_referral_code_on_profile` trigger + backfill — verified: all 6 existing profiles have codes).
+- Profile screen shows the user's code + invited-friend count + native Share sheet CTA.
+- Admin settings page (web + mobile) toggles program active, picks reward type, picks reward coupon.
+
+### Migration 017 (applied via MCP)
+
+`supabase/migrations/017_referral_signup_flow.sql`:
+- New helper `public.generate_coupon_redemption_code()` — 8-char alphanumeric, same alphabet as the client-side `generateCode()` in `useCouponRedemption.ts`. Used only by the trigger.
+- Replaces `public.handle_new_user()` (the AFTER INSERT trigger on `auth.users` that creates the profile row). New version:
+  1. Reads `raw_user_meta_data->>'referral_code'`, normalizes to uppercase.
+  2. Looks up the referrer's profile by `referral_code` (if a code was supplied).
+  3. Inserts the new profile with `referred_by` set (defensive `COALESCE` on conflict).
+  4. If `referral_settings.is_active` AND `reward_type='coupon'` AND `reward_coupon_id` points to an **active, current** coupon, inserts unredeemed `coupon_redemptions` rows for both the new user and the referrer.
+  5. Invalid codes / inactive program / missing reward coupon → signup still succeeds, the linkage is recorded where possible, no rewards. Trigger never blocks the signup.
+- `SECURITY DEFINER` so it bypasses RLS; runs in the owner context.
+- Self-referral is naturally impossible: at lookup time the new user's profile (and therefore their auto-generated code) does not yet exist.
+
+### Hooks
+
+`mobile/hooks/useReferrals.ts` (new):
+- `useReferralSettings()` / `useUpdateReferralSettings()` — single-row settings table read/write for admins.
+- `useMyReferral()` — current user's code, who referred them (if any), and `invitedCount` of profiles where `referred_by = me`. One round-trip, two parallel queries.
+- `checkReferralCodeExists(code)` — async helper available if we ever want pre-submit validation. Not used yet (the trigger handles invalid codes silently).
+
+### Signup flow
+
+`mobile/app/auth/login.tsx`:
+- New `referralCode` state. Only rendered in register mode, just below the password field.
+- Auto-uppercases, strips non-alphanumeric, max 12 chars.
+- On submit, the trimmed/uppercased code is passed as `options.data.referral_code` in `supabase.auth.signUp`. From there the auth trigger does the work — no extra client roundtrip.
+- Translations added to both `locales/fr.json` and `locales/en.json` under `auth.referralCode` + the whole `referral.*` namespace.
+
+### Profile screen
+
+`mobile/app/(tabs)/profile.tsx`:
+- New referral card between Preferences and Restaurant-owner sections. Only renders when signed in and the user's code is loaded.
+- Shows the code in a large orange display + a one-line hint ("Share this code with friends, you both earn a coupon").
+- Footer: pluralized "X friends invited" count + Share button.
+- Share button uses React Native's built-in `Share` API (no new native dep — `expo-clipboard` is NOT installed and not needed; iOS's share sheet includes "Copy to clipboard" natively).
+- Translations under `referral.*` with `_plural` variant for invitedCount.
+
+### Admin UI
+
+**Web** `web/app/admin/referrals/page.tsx` + `ReferralsClient.tsx`:
+- New "Referrals" entry in the Settings group of the admin sidebar.
+- Server-side: fetches settings + lists currently-active coupons + counts profiles with `referred_by NOT NULL` (total links stat).
+- Client-side: toggle for `is_active`, segmented control for `reward_type` (`coupon` | `none`; `points` deferred), `<select>` dropdown of active coupons keyed by id. Each interaction does an immediate update with optimistic UI + rollback on error.
+
+**Mobile** `mobile/app/admin/referrals.tsx`:
+- New gift-icon entry in the admin dashboard header.
+- Mirrors the web functionality: stat card, active toggle, reward-type segmented control, coupon picker via `Alert.alert` action sheet listing every active coupon by title + place name.
+
+### Files touched / created
+- `supabase/migrations/017_referral_signup_flow.sql` (new, applied)
+- `mobile/hooks/useReferrals.ts` (new)
+- `mobile/app/auth/login.tsx` (referral input + auth metadata)
+- `mobile/app/(tabs)/profile.tsx` (referral card)
+- `mobile/app/admin/index.tsx` (sidebar gift icon)
+- `mobile/app/admin/referrals.tsx` (new screen)
+- `mobile/locales/{fr,en}.json` (referral.* + auth.referralCode strings)
+- `web/app/admin/layout.tsx` (sidebar nav entry)
+- `web/app/admin/referrals/page.tsx` (new)
+- `web/app/admin/referrals/ReferralsClient.tsx` (new)
+- `docs/PLAN.md` (this entry)
+
+### tsc
+
+Both mobile + web `npx tsc --noEmit` clean (modulo pre-existing `@expo/vector-icons` warning, unrelated).
+
+### What changes for the next session
+- A signup with a valid referral code automatically issues a coupon redemption row to BOTH parties. The reward shows up next time either user opens the referenced coupon's place page — `useStartRedemption` returns the existing unredeemed row, the user just shows the QR.
+- The trigger silently ignores invalid codes — the signup never fails on a bad referral. This is intentional: error UX on signup is risky. If we want to validate inline later, `checkReferralCodeExists` is exported.
+- If the admin picks a reward coupon that later expires, signups that happen after expiry simply won't issue rewards (the trigger checks `expires_at > now()`).
+- Points-based rewards are deferred. If/when added, extend the trigger's reward issuance branch and the admin segmented control (and add a `user_points` table).
+
+### What's left in the original 12-step plan
+- Step 9: Stats screen (views count) for Standard+
+- Step 10: Competition trends + scheduled aggregator
+- Step 11: Renewals admin filter + expiring stat cards
+- Step 12: Moderation toggle UI
+
+Pre-launch (still pending): Gabon bounds re-enable, PRD 7.1 Share button, 7.2 Maps choice sheet, 7.4 Onboarding, Phase 6 (app icon, splash, EAS Build, store submission).
+
+---
+
+## 2026-05-10 (cont.) — Step 8 rework: welcome credit + multi-item redemption session
+
+Founder pushed back on Step 8 as originally shipped — the place-specific coupon reward was awkward (new user signs up, "your reward is at restaurant X you've never heard of"). Right answer was a platform-wide welcome credit. Also raised that the scanner was becoming a primary owner workflow but only supported one coupon at a time; a customer paying a single bill should be able to have all their things (coupons + credit) redeemed in one session.
+
+Both shipped end-to-end this session. Welcome credit is now the default referral reward, the scanner is a session/cart that locks to one customer, and redemption is atomic via a Postgres RPC. The coupon-as-reward path is kept for admins who prefer it but it's no longer the recommended choice.
+
+### Migration 018 (applied via MCP)
+
+`supabase/migrations/018_welcome_credit_and_session_redeem.sql`:
+- **`credit_balances`** (user_id PK, balance_fcfa, lifetime_earned, updated_at) — one row per user, balance never goes negative (CHECK).
+- **`credit_transactions`** (id, user_id, delta_fcfa, reason, ref_id, created_at) — append-only audit log. `reason` is one of `referral_signup`, `referral_invite`, `redemption_session`, `admin_adjust`.
+- RLS on both: users SELECT their own rows only; writes are SECURITY DEFINER through the trigger / RPC.
+- `referral_settings`: dropped + recreated the `reward_type` CHECK to add `'welcome_credit'`, added `reward_credit_fcfa int` column (positive when set). Migration auto-bumps the existing row to `welcome_credit` + 1 000 FCFA default when admin hadn't already picked a coupon reward.
+- `handle_new_user` extended: seeds a `credit_balances` row for every signup. If `reward_type='welcome_credit'` and the program is active, credits BOTH referrer + new user by `reward_credit_fcfa`, logs two `credit_transactions`. Old coupon-reward branch retained as alternate path.
+- Backfill: insert a 0-balance row for every existing profile.
+- **`apply_redemption_session(p_user_id, p_redemption_ids[], p_credit_to_use, p_bill_amount, p_place_id)`** — SECURITY DEFINER RPC, GRANT EXECUTE to `authenticated`. Atomic checkout:
+  1. Verifies caller is the place owner or an admin.
+  2. Locks every queued redemption `FOR UPDATE`, asserts they belong to `p_user_id`, are unredeemed, belong to coupons that are active + within their date window, and belong to `p_place_id`.
+  3. Splits `p_bill_amount` evenly across queued coupons; computes per-row discount from `discount_type`/`discount_value` capped at the row's share and at the remaining bill.
+  4. Clamps `p_credit_to_use` to `LEAST(requested, balance, remaining_after_coupons)`, decrements `credit_balances`, logs a `credit_transactions` row.
+  5. Returns a JSONB breakdown `{ bill_amount, total_discount, credit_used, customer_pays, lines: [...] }` for the client to render the success screen.
+- Throws named error codes: `MIXED_CUSTOMERS`, `ALREADY_REDEEMED`, `COUPON_INACTIVE_OR_EXPIRED`, `WRONG_PLACE`, `NOT_AUTHORIZED`, `CODE_NOT_FOUND`, `INVALID_BILL`. The client maps these to localized error strings in the review modal.
+
+### Hooks
+
+`mobile/hooks/useCredit.ts` (new):
+- `useCreditBalance()` — single row, staleTime 5s. Trigger always seeds a row, so the hook always returns one for authenticated users.
+- `useCreditTransactions(limit)` — paginated history. Not surfaced in the main profile UI yet but available for transparency / debugging.
+
+`mobile/hooks/useCouponRedemption.ts` (heavily extended):
+- New QR encode/decode: `encodeCreditQrPayload({ userId })` produces `OKILI|CREDIT|1|<userId>`. `decodeScanPayload` now returns a discriminated union (`'coupon'` or `'credit'`). Legacy `decodeQrPayload` kept as a thin wrapper for any caller that only cares about coupons.
+- `REDEMPTION_ERRORS` expanded with the new RPC error keys (`MIXED_CUSTOMERS`, `WRONG_PLACE`, `NOT_AUTHORIZED`, `INVALID_BILL`).
+- `useMyCoupons()` — every unredeemed `coupon_redemptions` row for the current user, joined with coupon + place data. Powers the new "My coupons" section on profile. Closes the discoverability gap from the original Step 8 design.
+- `fetchCouponScanDetails` / `fetchCreditScanDetails` — async, non-hook helpers the scanner calls per scan to validate and pull metadata before adding to the session.
+- `useApplyRedemptionSession()` — wraps the RPC call, invalidates `credit-balance`, `my-coupons`, `redemption*`, `coupon-usage` queries on success.
+- Removed the old `useRedeemCode` + `useScanContext` hooks — no consumers remain since the scanner now handles the whole session itself.
+
+`mobile/hooks/useReferrals.ts`:
+- `ReferralSettings.reward_type` extended to `'welcome_credit' | 'coupon' | 'points' | 'none'`.
+- `reward_credit_fcfa: number | null` added.
+
+### Scanner rewrite — `mobile/app/restaurant-admin/scanner.tsx`
+
+Completely new component. No more one-shot scan + modal handoff to the coupons page.
+
+- Camera stays open across scans. Each scan calls `fetchCouponScanDetails` or `fetchCreditScanDetails` and either:
+  - Adds the item to the session if valid + customer matches.
+  - Shows a transient red toast (`scanErrorToast`) explaining why it was rejected (different customer / wrong place / already redeemed / inactive). Toast dismissible by tap.
+- Session state locks to the first customer's `user_id`. Subsequent scans must match. Coupon items dedup by `redemptionId`; credit items refresh balance silently if rescanned.
+- Bottom sheet shows the customer's name/email + horizontal scrollable chip row of queued items (each removable). Big orange **Review & apply (N)** CTA opens the embedded review modal.
+- Review modal: customer card, per-coupon discount preview (with live calculation), optional credit-amount input (defaults to "use max available"), running `Discount −X · Credit −Y · Customer pays Z`. **Apply all** calls the RPC; success swaps the modal into a checkmark+summary state; **Done** resets everything and pops back.
+- Inline `KeyboardAvoidingView` + `ScrollView` so the modal remains usable when the keyboard is up.
+- Old `ScanResultModal.tsx` deleted; old `coupons.tsx` route-param handoff stripped.
+
+### Profile screen — `mobile/app/(tabs)/profile.tsx`
+
+- Wrapped body in a `ScrollView` (the screen now holds enough content that it overflows).
+- **Welcome credit card**: large orange balance, friendly hint ("Spend it at any O'Kili restaurant"), primary button = **Mon QR de crédit** which opens a modal showing the user's credit QR + balance + "show this at checkout" instruction. Secondary button = **Share my code** (kept the existing system Share API for the referral message). Footer line: `Code: ABC23XYZ · 2 friends invited`. Replaces the old referral-only card.
+- **My coupons section**: every unredeemed coupon the user holds. Each card has a place-name eyebrow + coupon title + discount pill + expiry; tap → `/place/{placeId}` where the existing CouponsBlock handles the QR flow. Only rendered when the user has at least one — no empty state taking up space.
+- **Owner section** gains a new prominent **Scan a coupon** row above "Manage my restaurant", with a `scan` icon and a subtitle explaining it validates customer coupons and credits. Lets owners reach the scanner from anywhere in the app, not just `/restaurant-admin/coupons`.
+- Credit QR modal uses `react-native-qrcode-svg` (already a dep from Step 7).
+
+### Admin referral settings
+
+Both surfaces now show three reward-type options: **Welcome credit (FCFA)** (recommended), **Coupon at a place**, **No reward (track only)**. Points-based is still post-MVP.
+
+- **Web** (`web/app/admin/referrals/ReferralsClient.tsx`): three-button segmented control. When **Welcome credit** is selected, an FCFA amount input appears with debounced save on blur. When **Coupon** is selected, the existing coupon picker shows. Switching reward type nulls the other field on save.
+- **Mobile** (`mobile/app/admin/referrals.tsx`): same three-button row + FCFA `TextInput` + the existing Alert.alert coupon picker. Same defaults (1 000 FCFA when switching to credit, null otherwise).
+
+### Types
+
+Mobile `database.types.ts` updated:
+- `coupons` row: gained `max_total_redemptions`, `discount_type`, `discount_value` (from migration 016, already present).
+- `coupon_redemptions` row: gained `bill_amount`, `discount_applied` (already present).
+- `referral_settings.reward_type` widened to include `'welcome_credit'`; `reward_credit_fcfa` field added.
+- `credit_balances` + `credit_transactions` tables defined.
+- `Functions.apply_redemption_session` typed with Args + Returns matching the RPC's JSONB shape.
+- `cp`'d to `web/lib/database.types.ts` so both apps stay in sync.
+
+### tsc
+
+Mobile + web `npx tsc --noEmit` both clean (modulo the pre-existing `@expo/vector-icons` resolver warning).
+
+### Files touched / created
+- `supabase/migrations/018_welcome_credit_and_session_redeem.sql` (new, applied)
+- `mobile/lib/database.types.ts` + `web/lib/database.types.ts` (synced)
+- `mobile/hooks/useCredit.ts` (new)
+- `mobile/hooks/useCouponRedemption.ts` (extended; removed old single-coupon helpers)
+- `mobile/hooks/useReferrals.ts` (widened types)
+- `mobile/app/restaurant-admin/scanner.tsx` (full rewrite — session/cart with embedded review modal)
+- `mobile/app/restaurant-admin/coupons.tsx` (stripped ScanResultModal wiring)
+- `mobile/components/restaurant-admin/ScanResultModal.tsx` (deleted)
+- `mobile/app/(tabs)/profile.tsx` (credit card, My coupons section, owner scan entry, credit QR modal, wrapped in ScrollView)
+- `mobile/app/admin/referrals.tsx` (welcome_credit + FCFA input)
+- `web/app/admin/referrals/ReferralsClient.tsx` (welcome_credit + FCFA input)
+- `web/app/admin/referrals/page.tsx` (defaults patched for new field)
+- `docs/PLAN.md` (this entry)
+
+### What changes for the next session
+- The default referral reward is now `welcome_credit` (1 000 FCFA each side). Admin can switch to `coupon` if they want a partner-promo style reward, but credits are the recommended path for the small-restaurant guide app.
+- A new user with a valid referral code gets credit on signup → it appears on their profile immediately. They show their credit QR at any participating restaurant; the owner scans it during checkout. The reward is no longer tied to one specific place.
+- `useRedeemCode` is gone. All single + multi-item redemptions now go through `useApplyRedemptionSession` → `apply_redemption_session` RPC. The RPC is the single source of truth for "finalize a checkout" — owners cannot bypass quotas, place authorization, customer locking, or credit balance limits from the client.
+- The scanner is now reached from BOTH `/restaurant-admin/coupons` (header scan button, existing) AND the Profile tab (owner-only "Scan a coupon" row, new). Both push to `/restaurant-admin/scanner`.
+- The credit QR encodes only the user's id (`OKILI|CREDIT|1|<uuid>`). Anyone with that QR can let an owner pull the user's credit balance into their checkout session — but the actual deduction still requires the owner to authenticate + own the place. There is no other security concern: the user_id alone is not enough to do anything bypassing the RPC's checks.
+- For analytics later: `credit_transactions` is the audit trail. Sum positives = earnings, sum negatives = spends. `reason` field tells you why each row exists. Useful when we build the renewals/stats screens (Step 9 / 11).
+
+---
+
+## 2026-05-12 — Activity surfaces: user / owner / admin transparency
+
+Founder raised that the data was all being tracked but **nothing was visible to anyone**. The DB had complete audit trails (`credit_transactions`, `coupon_redemptions`) but none of the three roles could actually see their own history. He's right — a credit/discount system without transparent activity is broken trust.
+
+Shipped three new feeds + admin analytics + one tiny schema add, end-to-end.
+
+### Migration 019 (applied)
+
+`supabase/migrations/019_credit_tx_place_link.sql`:
+- Added `credit_transactions.place_id uuid REFERENCES places ON DELETE SET NULL`. Partial index `credit_transactions_place_idx ... WHERE place_id IS NOT NULL`.
+- Updated `apply_redemption_session` RPC to pass `p_place_id` through into the `credit_transactions` row it inserts on credit deduction. Now owners can query "all credit spent at my place" by a single `place_id` filter rather than deriving it from timestamps.
+
+### Hooks (new — `mobile/hooks/useActivity.ts`)
+
+Four hooks, all React Query-backed:
+- `useUserActivity(limit)` — merges the current user's `credit_transactions` + their redeemed `coupon_redemptions` into one chronological feed. Resolves referrer/referee names for `referral_invite` rows via a follow-up `IN` lookup.
+- `useOwnerActivity(placeId, limit)` — for a given place, merges `coupon_redemptions` where the joined coupon belongs to that place + `credit_transactions` with `place_id = X AND reason = 'redemption_session'`. Joined with the customer's profile (full_name + email).
+- `useReferralAnalytics()` — totals: credit issued (sum of positive deltas), credit spent (abs sum of negative deltas), outstanding (sum of `credit_balances.balance_fcfa`), total referral links. Plus top-10 referrers ranked by count, name + email + their referral_code.
+- `useAdminActivity(limit)` — same shape as user activity but cross-platform, joined with the actor's profile name/email + the place. Powers the global admin feed.
+
+All four use sensible `staleTime`s (5s for user/owner, 10–30s for admin) so navigation between screens doesn't refetch unnecessarily.
+
+### User-side — Profile activity
+
+`mobile/app/account/activity.tsx` (new):
+- Top stat card: current credit balance + "Lifetime earned" sub-line.
+- Chronological feed with per-event icon, title, subtitle, amount, timestamp. Five event kinds (welcome gift / invite reward / admin adjust / credit spend / coupon redemption), each with its own copy, icon, and amount tinting.
+- Tap any row that has a `placeId` → navigate to that place's detail page.
+- Empty state explains what'll show up.
+
+`mobile/app/(tabs)/profile.tsx`: added a discreet "Voir mon activité / View my activity" link inside the welcome-credit card. Routes to `/account/activity`.
+
+### Owner-side — Restaurant-admin history
+
+`mobile/app/restaurant-admin/history.tsx` (new):
+- Period filter chips: Today / 7 days / 30 days / All.
+- Aggregate strip when the filter has results: Transactions count · Total discounts · Total credit used.
+- Per-row entries: customer name + email, coupon title (or "Credit used"), bill share, discount applied (or credit amount), timestamp. Icons + tints separate coupon redemptions from credit deductions.
+- Owner gets a clean revenue picture: every coupon-driven discount AND every credit deduction at their place, in one feed.
+
+`mobile/app/restaurant-admin/index.tsx`: added a **Historique / History** tile in the Actions section (open to all tiers — it's basic transparency, not a paid feature).
+
+### Admin — full visibility on `/admin/referrals` + new `/admin/activity`
+
+**Web `/admin/referrals` (`page.tsx`):**
+- 4 hero stat cards on top: Referral links · Credit issued · Credit spent · Outstanding.
+- 2-column layout: settings (existing client component) on the left 2/3, **Top referrers** ranked list on the right 1/3.
+- Below: **Recent credit activity** table — 15 most recent credit transactions, with user, reason, place, amount, timestamp. "View all →" link to the full activity page.
+
+**Web `/admin/activity` (new `page.tsx`):**
+- Full searchable timeline: pulls the last 200 credit_transactions + the last 200 redeemed coupon_redemptions, merges client-side.
+- Filter chips: All / Credit movements / Coupon redemptions.
+- Search box: filters by user / place / coupon title (substring match, case-insensitive).
+- Table: kind badge, user, event label, place, amount (green for credit earn, orange for spend/coupon), timestamp.
+- Sidebar nav entry added in `web/app/admin/layout.tsx` under the "Général" group.
+
+**Mobile `/admin/referrals` (`mobile/app/admin/referrals.tsx`):**
+- 2×2 grid of mini-stat cards mirroring the web hero (Links / Credit issued / Credit spent / Outstanding).
+- Top referrers card with rank pill + name + email + count.
+- "Voir l'activité complète" link to `/admin/activity`.
+
+**Mobile `/admin/activity` (new):**
+- Same filter chips + search input as web.
+- Compact rows: tint + icon, title, customer/place subtitle, timestamp, amount.
+- Reachable from `/admin` dashboard header (new clock icon, added alongside the gift / settings / users icons).
+
+### tsc
+
+Both `npx tsc --noEmit` runs clean (modulo the pre-existing `@expo/vector-icons` warning).
+
+### Files touched / created
+- `supabase/migrations/019_credit_tx_place_link.sql` (new, applied)
+- `mobile/lib/database.types.ts` + `web/lib/database.types.ts` (synced — added `place_id` to `credit_transactions`)
+- `mobile/hooks/useActivity.ts` (new — four hooks)
+- `mobile/app/account/activity.tsx` (new)
+- `mobile/app/(tabs)/profile.tsx` (added activity link inside the credit card)
+- `mobile/app/restaurant-admin/history.tsx` (new)
+- `mobile/app/restaurant-admin/index.tsx` (added History tile)
+- `mobile/app/admin/referrals.tsx` (stats grid, top referrers list, full-activity link)
+- `mobile/app/admin/activity.tsx` (new)
+- `mobile/app/admin/index.tsx` (clock-icon header button)
+- `web/app/admin/referrals/page.tsx` (4-card hero, top referrers, recent activity table)
+- `web/app/admin/activity/page.tsx` (new)
+- `web/app/admin/layout.tsx` (Activity sidebar entry)
+- `docs/PLAN.md` (this entry)
+
+### What changes for the next session
+- The trio (user / owner / admin) now sees everything. No more "the data is there but nowhere to look at it."
+- All new feeds are read-only and React-Query cached. No new write paths beyond the RPC update in migration 019.
+- Search on `/admin/activity` is client-side substring match across user/place/coupon. Fine for the current data volume; if rows blow past a few thousand, paginate or move to a Postgres `ilike` query with proper indexes.
+- The user-side activity hook merges streams client-side and caps at `limit` rows. If a user has a lot of activity, "Load more" pagination is a small follow-up but not urgent.
+- `credit_transactions.place_id` is set for `redemption_session` reason; null for `referral_signup` / `referral_invite` / `admin_adjust`. Owner-side filter relies on that.
+
