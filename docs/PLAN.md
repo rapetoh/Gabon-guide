@@ -1879,3 +1879,91 @@ Both `npx tsc --noEmit` runs clean.
 - Place owners cannot edit or delete platform coupons (enforced by RLS via the existing owner-or-admin policy — the owner check requires the joined place row, which doesn't exist for `place_id IS NULL`).
 - Business model is still a real-world decision: who absorbs the discount on a platform coupon (the platform via reimbursement, or partner restaurants who agreed up front) is not enforced in code. The RPC simply records the discount applied — accounting lives elsewhere.
 
+---
+
+## 2026-05-13 — Handoff: end of long session
+
+Long session approaching context limit. This entry hands the work over to a fresh chat so the next session can pick up cleanly from git.
+
+### Tell the next session
+The project is at `/Users/roch/Desktop/Gabon-guide`, branch `dev`, latest commit `3776ad4` on `origin/dev`. Read this PLAN.md from the bottom up — the last ~five session entries cover everything from coupons quota (Step 7+) through platform coupons + admin UI scaling. Nothing important lives only in chat; everything is in git.
+
+### Commits since the last handoff (2026-05-10 → 2026-05-13)
+- `75b1f0a` Coupons quotas + welcome credit + activity surfaces (migrations 016 → 019)
+- `77f4cef` Platform coupons + admin coupons UI at scale (migrations 020 + 020b)
+- `888cafd` Admin UI fixes: decluttered Places header, fixed Publish-button overlap on new coupon page, fixed filter chips that were rendering as 600pt-tall vertical capsules
+- `3776ad4` Fix PostgREST PGRST201 ambiguity on `coupons` ↔ `places` after migration 020 — six query sites updated to use explicit FK names
+
+All five new migrations (016 / 017 / 018 / 019 / 020 / 020b) are **applied to the live Supabase project** (`fvmzsxmlpwvtnszmuowc`) via the MCP `apply_migration` tool. The next session does NOT need to re-apply anything.
+
+### Current functional state
+
+**Working + verified by the founder on the iPhone build:**
+- Coupon QR scanning (after the native `ExpoCameraBarcodeScanning` pod was added in earlier session).
+- Coupon redemption with quotas, discount math, bill capture — single-coupon flow.
+- Welcome credit signup + balance display.
+- Profile screen layout (credit card, My coupons section, Activity link).
+- Admin Places page (decluttered header).
+- Admin coupons list (after the PGRST201 fix in `3776ad4`).
+
+**In the code + DB but NOT yet end-to-end verified by founder:**
+- **Multi-item session scanner** — owner scans coupon QR + credit QR for same customer → atomic Apply All. Needs founder to actually do a multi-scan to confirm.
+- **Platform coupon creation** from the new `/admin/coupons/new` page (web + mobile). Needs founder to create one and verify it appears on the right place(s) detail page(s).
+- **Platform coupon redemption** — when the customer redeems a platform coupon at a place, the RPC's place-match logic kicks in. The RPC update is `apply_redemption_session` from `020b`.
+- **Activity feeds** — `/account/activity` (user), `/restaurant-admin/history` (owner), `/admin/activity` + `/admin/referrals` analytics (admin). All wired but the founder hasn't sat down and clicked through them in order.
+- **My coupons** section on Profile — listing every unredeemed coupon. Should now correctly include platform coupons (place is left-joined).
+
+### Critical things to know about the code
+
+These are non-obvious if the next session re-reads the code cold:
+
+1. **Coupon redemption goes through `apply_redemption_session` RPC.** The old `useRedeemCode` + `useScanContext` hooks were deleted. `useApplyRedemptionSession` is the only client entry point now. The RPC is in migration `020b` — its body lives at `supabase/migrations/020b_redeem_session_accepts_platform_coupons.sql`.
+
+2. **`useUserRedemption` only returns UNREDEEMED rows.** Anyone reading "is this coupon ever redeemed by me?" needs `useLastUserRedemption` or `useCouponUsage`. Don't rely on `useUserRedemption.data?.redeemed_at` — it's always null.
+
+3. **PostgREST coupons ↔ places ambiguity.** Migration 020 added `coupon_places`, creating a second FK path from `coupons` to `places`. Every embedded join from `coupons` to `places` MUST use the explicit FK name: `places!coupons_place_id_fkey(...)`. The six existing sites are fixed in commit `3776ad4` — but any NEW query that joins these tables will hit `PGRST201` if the FK isn't named.
+
+4. **Admin home is Profile → Admin section, not the Places page.** I refactored this session: the Places-management page (`/admin`) is now only about places — back, title, Users icon (for quick owner assignment), `+` for new place. Every other admin domain (Coupons, Activity, Referrals, Tier settings, Users) is a labeled row in Profile → Admin. If you need to add a new admin domain, append a row there; do NOT add an icon to the Places page header.
+
+5. **Scanner is a session/cart, not one-shot.** `mobile/app/restaurant-admin/scanner.tsx` queues items in a locked-to-one-customer session and finalizes via the RPC. The QR decoder `decodeScanPayload` returns a tagged union (`{ kind: 'coupon' }` or `{ kind: 'credit' }`).
+
+6. **Welcome credit QR encodes only the user_id** as `OKILI|CREDIT|1|<uuid>`. The user_id alone has no power without authenticated owner + RPC check, so the QR is safe to share publicly.
+
+7. **Welcome credit is the DEFAULT referral reward.** Migration 018 bumped existing `referral_settings` to `reward_type='welcome_credit'`, 1 000 FCFA each side. Coupon-based rewards still work (admin can switch) but are not the default.
+
+8. **Native deps haven't moved since 2026-05-10.** `expo-camera` 55.0.18 + `ExpoCameraBarcodeScanning` pod + `ZXingObjC` with `:modular_headers => true`. The config plugin `mobile/plugins/withExpoCameraBarcodeScanning.js` keeps the pod linked across `expo prebuild` runs. If a fresh prebuild is ever needed, the plugin auto-injects the pod into the regenerated Podfile.
+
+9. **`mobile/ios/` is gitignored.** Native rebuilds happen on the founder's Mac. Don't expect to find `Podfile.lock` or anything iOS-build-state in git. JS reloads on Metro are enough for almost everything we've shipped since the pod install.
+
+### Open issues / observations to keep in mind
+
+- **React Query hooks silently swallow errors in the UI.** The PGRST201 bug looked like "no data" because the hooks throw but the UI only checks `isLoading` + `rows.length === 0`. Worth adding a tiny error banner on the admin lists (`/admin/coupons`, `/admin/activity`, `/admin/referrals`) so the next failure is loud. Not blocking — 30 min of cleanup whenever.
+- **Activity feeds aren't paginated.** They cap at 50 / 200 rows. Fine at MVP scale; need pagination if a single user or place exceeds those limits. Same client-side merge pattern — would need a "Load more" cursor.
+- **Quota checks are still client-side in `useStartRedemption`.** Two devices simultaneously hitting the last quota slot could race. The RPC `apply_redemption_session` enforces them server-side at redemption time, so it's not a money/correctness bug — just an "occasional one-extra-QR-generated" edge case.
+
+### What to do next, in order
+
+1. **Founder finishes testing what was shipped this session.** A clean walkthrough:
+   - Admin (web): `/admin/coupons` should now populate with real coupons. Create a platform coupon with "All restaurants" scope, then with "Selected restaurants" scope. Both should show up on the appropriate place detail pages.
+   - User (simulator): open a place that has the platform coupon → see it labeled "Promo O'Kili" in violet, alongside the place's own coupons.
+   - Owner (iPhone): scan a customer's credit QR + a coupon QR in the same session → Review → Apply All → verify credit balance drops + coupon row marked redeemed.
+   - Verify the three activity feeds (`/account/activity`, `/restaurant-admin/history`, `/admin/activity`) reflect all the new events with correct timestamps + amounts.
+2. **Then pivot to pre-launch.** Remaining from the original PRD:
+   - Re-enable Gabon bounding box check in `mobile/components/admin/PlaceForm.tsx` + `web/components/PlaceForm.tsx` (search for `TODO (pre-launch)`).
+   - PRD 7.1 Share button on the place detail page (Branch.io smart links — plumbing is in `mobile/app/place/[id].tsx`).
+   - PRD 7.2 Apple/Google Maps choice sheet (most logic already exists in `mobile/app/place/[id].tsx`'s map button).
+   - PRD 7.4 Onboarding flow for first-time users.
+   - Phase 6: app icon, splash screen, EAS Build setup, App Store + Play Store submission paperwork.
+3. **Defer until post-launch:** Step 9 (stats screen — needs real user data), Step 10 (competition trends — same), Step 11 (renewals admin filter — small, do whenever), Step 12 (moderation toggle UI — small, do whenever).
+
+### Useful pointers
+- Memory at `/Users/roch/.claude/projects/-Users-roch-Desktop-Gabon-guide/memory/`:
+  - `project_prelaunce_checklist.md` (Gabon bounds re-enable)
+  - `project_architecture_decisions.md` (10 entries pre-dating this work)
+  - `feedback_dont_propose_lesser_option.md` (don't dress up the easier-to-build option as "MVP pragmatism")
+- Supabase project ID: `fvmzsxmlpwvtnszmuowc`. MCP tools work — list migrations via `mcp__claude_ai_Supabase__list_migrations`, apply via `apply_migration`, query via `execute_sql`.
+- Metro ports: 8081 is held by founder's other voice-expense project. This project uses 8082 / 8083 / 8084. Expo will prompt for the port; accept the suggested alternative.
+- The iPhone test device is "Senyo iPhone" (bundle ID `com.rapetoh.okili` per the dev profile workaround; pre-launch will need to revert to `com.okili.app` per `2026-05-10` handoff section).
+
+Good luck. Everything is in git. Open the next session, point it at `/Users/roch/Desktop/Gabon-guide`, tell it to read `docs/PLAN.md` from the bottom up, and it should pick up exactly where this one left off.
+
