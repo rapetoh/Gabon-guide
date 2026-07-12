@@ -113,6 +113,7 @@ export interface Database {
           avatar_url: string | null
           email: string | null
           is_admin: boolean
+          is_blocked: boolean
           role: 'user' | 'restaurant_owner' | 'admin'
           preferred_zones: string[]
           preferred_vibes: string[]
@@ -121,7 +122,7 @@ export interface Database {
           created_at: string
         }
         Insert: Pick<Database['public']['Tables']['profiles']['Row'], 'id'> & Partial<Pick<Database['public']['Tables']['profiles']['Row'], 'email' | 'full_name' | 'referred_by'>>
-        Update: Partial<Pick<Database['public']['Tables']['profiles']['Row'], 'full_name' | 'avatar_url' | 'email' | 'is_admin' | 'role' | 'preferred_zones' | 'preferred_vibes' | 'referred_by'>>
+        Update: Partial<Pick<Database['public']['Tables']['profiles']['Row'], 'full_name' | 'avatar_url' | 'email' | 'is_admin' | 'is_blocked' | 'role' | 'preferred_zones' | 'preferred_vibes' | 'referred_by'>>
         Relationships: []
       }
       favorites: {
@@ -267,14 +268,16 @@ export interface Database {
           redeemed_at: string | null
           bill_amount: number | null
           discount_applied: number | null
+          place_id: string | null
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['coupon_redemptions']['Row'], 'id' | 'created_at' | 'redeemed_at' | 'bill_amount' | 'discount_applied'> & {
+        Insert: Omit<Database['public']['Tables']['coupon_redemptions']['Row'], 'id' | 'created_at' | 'redeemed_at' | 'bill_amount' | 'discount_applied' | 'place_id'> & {
           redeemed_at?: string | null
           bill_amount?: number | null
           discount_applied?: number | null
+          place_id?: string | null
         }
-        Update: Partial<Pick<Database['public']['Tables']['coupon_redemptions']['Row'], 'redeemed_at' | 'bill_amount' | 'discount_applied'>>
+        Update: Partial<Pick<Database['public']['Tables']['coupon_redemptions']['Row'], 'redeemed_at' | 'bill_amount' | 'discount_applied' | 'place_id'>>
         Relationships: []
       }
       referral_settings: {
@@ -341,7 +344,17 @@ export interface Database {
         Relationships: []
       }
     }
-    Views: Record<string, never>
+    Views: {
+      // Safe public projection of profiles (migration 025).
+      profiles_public: {
+        Row: {
+          id: string
+          full_name: string | null
+          avatar_url: string | null
+        }
+        Relationships: []
+      }
+    }
     Functions: {
       set_review_owner_reply: {
         Args: { p_review_id: string; p_reply: string }
@@ -354,6 +367,7 @@ export interface Database {
           full_name: string | null
           role: string
           is_admin: boolean
+          is_blocked: boolean
           email: string | null
           joined_at: string
         }[]
