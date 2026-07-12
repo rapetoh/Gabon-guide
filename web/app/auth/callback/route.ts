@@ -41,11 +41,11 @@ export async function GET(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('is_admin')
+    .select('is_admin, role')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (!profile?.is_admin) {
+  if (!profile?.is_admin && profile?.role !== 'admin') {
     await supabase.auth.signOut()
     return NextResponse.redirect(`${origin}/login?error=not_admin`)
   }

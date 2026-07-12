@@ -34,14 +34,14 @@ export async function proxy(request: NextRequest) {
     if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
-    // Verify admin role
+    // Verify admin role — accept either the legacy is_admin flag or role='admin'
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (!profile?.is_admin) {
+    if (!profile?.is_admin && profile?.role !== 'admin') {
       return NextResponse.redirect(new URL('/login?error=not_admin', request.url))
     }
   }
@@ -49,11 +49,11 @@ export async function proxy(request: NextRequest) {
   if (isLoginPage && user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (profile?.is_admin) {
+    if (profile?.is_admin || profile?.role === 'admin') {
       return NextResponse.redirect(new URL('/admin', request.url))
     }
   }
