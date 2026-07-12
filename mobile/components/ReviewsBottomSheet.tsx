@@ -10,6 +10,7 @@
  * Implemented with React Native Modal + Animated — no third-party libs needed.
  */
 import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -271,9 +272,17 @@ export default function ReviewsBottomSheet({ placeId, placeName, visible, onClos
                 return (
                   <View key={review.id} style={[styles.reviewCard, isOwn && styles.reviewCardOwn]}>
                     <View style={styles.reviewHeader}>
-                      <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{initial}</Text>
-                      </View>
+                      {review.profiles?.avatar_url ? (
+                        <Image
+                          source={{ uri: review.profiles.avatar_url }}
+                          style={styles.avatar}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={styles.avatar}>
+                          <Text style={styles.avatarText}>{initial}</Text>
+                        </View>
+                      )}
                       <View style={{ flex: 1 }}>
                         <Text style={styles.reviewName}>
                           {isOwn ? (lang === 'fr' ? 'Vous' : 'You') : name}

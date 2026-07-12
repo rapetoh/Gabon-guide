@@ -416,7 +416,11 @@ function ReviewModal({
   const customerPays = billNum !== null ? Math.max(0, billNum - totalCouponDiscount - creditWanted) : null
 
   const customerLabel = session.customerName?.trim() || session.customerEmail || (lang === 'fr' ? 'Client' : 'Customer')
-  const showsBillInput = couponItems.some(c => c.discountType !== null) || creditItem !== undefined
+  // Always ask for the bill when anything is being applied — even a coupon
+  // with no stored discount value. The recorded bill is what makes the
+  // owner's history + analytics meaningful, and a uniform flow (scan →
+  // review → bill → apply) beats a variant that silently skips the step.
+  const showsBillInput = couponItems.length > 0 || creditItem !== undefined
 
   const errorText = (key: string) => {
     switch (key) {

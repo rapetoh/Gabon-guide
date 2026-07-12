@@ -28,6 +28,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useFavorites } from '../hooks/useFavorites'
+import { useReviews } from '../hooks/useReviews'
 import { useSession } from '../hooks/useSession'
 import { supabase } from '../lib/supabase'
 import type { FeedItem } from '../hooks/useVideoFeed'
@@ -120,6 +121,8 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
 
   const [reviewsOpen, setReviewsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  // Same query key as ReviewsBottomSheet — one shared cache entry per place
+  const { data: reviewsData } = useReviews(item.id)
 
   // ── Photo slideshow ──────────────────────────────────────────────────────────
   const [photoIndex, setPhotoIndex] = useState(0)
@@ -269,7 +272,9 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
         <Pressable style={styles.actionBtn} onPress={() => setReviewsOpen(true)}>
           <Ionicons name="chatbubble-outline" size={27} color="#fff" />
           <Text style={styles.actionLabel}>
-            {lang === 'fr' ? 'Avis' : 'Reviews'}
+            {reviewsData && reviewsData.count > 0
+              ? String(reviewsData.count)
+              : lang === 'fr' ? 'Avis' : 'Reviews'}
           </Text>
         </Pressable>
 

@@ -21,21 +21,54 @@ export interface ReviewWithProfile {
 }
 
 // Fetches all reviews for a place and computes the average rating.
+//
+// Reviews and reviewer-display info are fetched in two queries instead of one
+// PostgREST embed. The base `profiles` table is no longer publicly readable
+// (migration 025 — privacy fix), so we read names/avatars from the safe
+// `profiles_public` view and stitch them in client-side.
 export function useReviews(placeId: string) {
   return useQuery({
     queryKey: ['reviews', placeId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: rows, error } = await supabase
         .from('reviews')
-        .select(`
-          id, rating, comment, owner_reply, owner_reply_at, created_at,
-          profiles ( id, full_name, avatar_url )
-        `)
+        .select('id, user_id, rating, comment, owner_reply, owner_reply_at, created_at')
         .eq('place_id', placeId)
         .order('created_at', { ascending: false })
       if (error) throw error
 
-      const reviews = (data ?? []) as unknown as ReviewWithProfile[]
+      const reviewRows = (rows ?? []) as Array<{
+        id: string
+        user_id: string
+        rating: number
+        comment: string | null
+        owner_reply: string | null
+        owner_reply_at: string | null
+        created_at: string
+      }>
+
+      const userIds = Array.from(new Set(reviewRows.map(r => r.user_id).filter(Boolean)))
+      const profileById = new Map<string, { id: string; full_name: string | null; avatar_url: string | null }>()
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles_public')
+          .select('id, full_name, avatar_url')
+          .in('id', userIds)
+        for (const p of (profiles ?? []) as Array<{ id: string; full_name: string | null; avatar_url: string | null }>) {
+          profileById.set(p.id, p)
+        }
+      }
+
+      const reviews: ReviewWithProfile[] = reviewRows.map(r => ({
+        id: r.id,
+        rating: r.rating,
+        comment: r.comment,
+        owner_reply: r.owner_reply,
+        owner_reply_at: r.owner_reply_at,
+        created_at: r.created_at,
+        profiles: profileById.get(r.user_id) ?? null,
+      }))
+
       const average =
         reviews.length > 0
           ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length

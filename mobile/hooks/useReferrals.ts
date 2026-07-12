@@ -82,14 +82,13 @@ export function useMyReferral() {
 // Light-weight validity check used by the signup form before submission.
 // Returns true if the code matches an existing profile, false otherwise.
 // We can't call this *after* signUp without auth, so we check before.
+//
+// Goes through the `referral_code_exists` SECURITY DEFINER RPC (migration 025)
+// so anonymous callers don't need direct read access to the profiles table.
 export async function checkReferralCodeExists(code: string): Promise<boolean> {
   const trimmed = code.trim().toUpperCase()
   if (!trimmed) return false
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('referral_code', trimmed)
-    .maybeSingle()
+  const { data, error } = await supabase.rpc('referral_code_exists', { p_code: trimmed })
   if (error) return false
-  return !!data
+  return data === true
 }

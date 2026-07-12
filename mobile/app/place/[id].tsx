@@ -912,9 +912,17 @@ export default function PlaceDetailScreen() {
               return (
                 <View key={review.id} style={[styles.reviewCard, isOwn && styles.reviewCardOwn]}>
                   <View style={styles.reviewCardHeader}>
-                    <View style={styles.reviewAvatar}>
-                      <Text style={styles.reviewAvatarText}>{initial}</Text>
-                    </View>
+                    {review.profiles?.avatar_url ? (
+                      <Image
+                        source={{ uri: review.profiles.avatar_url }}
+                        style={styles.reviewAvatar}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={styles.reviewAvatar}>
+                        <Text style={styles.reviewAvatarText}>{initial}</Text>
+                      </View>
+                    )}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.reviewName}>{isOwn ? (lang === 'fr' ? 'Vous' : 'You') : name}</Text>
                       <Text style={styles.reviewDate}>{date}</Text>

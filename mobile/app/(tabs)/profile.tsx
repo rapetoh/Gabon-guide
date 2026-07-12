@@ -4,7 +4,8 @@ import { router } from 'expo-router'
 import AppBackground from '../../components/AppBackground'
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext'
 import { useTranslation } from 'react-i18next'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Modal,
   Pressable,
@@ -63,9 +64,42 @@ export default function ProfileScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [creditQrOpen, setCreditQrOpen] = useState(false)
+  const [creditApplied, setCreditApplied] = useState<{ amount: number } | null>(null)
+  const qc = useQueryClient()
 
   const creditBalance = credit?.balance_fcfa ?? 0
   const creditQrPayload = session?.user.id ? encodeCreditQrPayload({ userId: session.user.id }) : null
+
+  // Realtime: while the credit QR modal is open, watch for the owner
+  // applying a credit deduction (a credit_transactions INSERT with reason
+  // 'redemption_session' and a negative delta). Flip to a success state.
+  useEffect(() => {
+    if (!creditQrOpen || !session?.user.id) return
+    setCreditApplied(null)
+    const userId = session.user.id
+    const channel = supabase
+      .channel(`credit-applied:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'credit_transactions', filter: `user_id=eq.${userId}` },
+        payload => {
+          const row = payload.new as { reason: string; delta_fcfa: number }
+          if (row.reason === 'redemption_session' && row.delta_fcfa < 0) {
+            setCreditApplied({ amount: Math.abs(row.delta_fcfa) })
+            qc.invalidateQueries({ queryKey: ['credit-balance', userId] })
+            qc.invalidateQueries({ queryKey: ['credit-transactions', userId] })
+            qc.invalidateQueries({ queryKey: ['user-activity', userId] })
+          }
+        },
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [creditQrOpen, session?.user.id, qc])
+
+  function closeCreditQr() {
+    setCreditQrOpen(false)
+    setCreditApplied(null)
+  }
 
   const handleLogout = () => supabase.auth.signOut()
 
@@ -90,7 +124,9 @@ export default function ProfileScreen() {
         <Text style={styles.title}>{lang === 'fr' ? 'Profil' : 'Profile'}</Text>
 
         {session ? (
-          <View style={styles.profileCard}>
+          /* Whole card opens the account editor — standard "tap your
+             identity to edit it" pattern; chevron signals tappability. */
+          <Pressable style={styles.profileCard} onPress={() => router.push('/account/edit' as any)}>
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatarImg} contentFit="cover" />
             ) : (
@@ -106,7 +142,8 @@ export default function ProfileScreen() {
                 {lang === 'fr' ? 'Membre O\'Kili' : 'O\'Kili member'}
               </Text>
             </View>
-          </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} />
+          </Pressable>
         ) : (
           <View style={styles.authCard}>
             <View style={styles.authIcon}>
@@ -416,32 +453,58 @@ export default function ProfileScreen() {
         visible={creditQrOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setCreditQrOpen(false)}
+        onRequestClose={closeCreditQr}
       >
-        <Pressable style={styles.qrBackdrop} onPress={() => setCreditQrOpen(false)}>
+        <Pressable style={styles.qrBackdrop} onPress={closeCreditQr}>
           <Pressable style={styles.qrCard} onPress={() => {/* swallow */}}>
-            <Pressable onPress={() => setCreditQrOpen(false)} style={styles.qrCloseBtn} hitSlop={12}>
+            <Pressable onPress={closeCreditQr} style={styles.qrCloseBtn} hitSlop={12}>
               <Ionicons name="close" size={22} color={colors.textPrimary} />
             </Pressable>
-            <View style={styles.qrIconWrap}>
-              <Ionicons name="gift" size={22} color="#E8571A" />
-            </View>
-            <Text style={[styles.qrTitle, { color: colors.textPrimary }]}>
-              {lang === 'fr' ? 'Mon crédit O\'Kili' : 'My O\'Kili credit'}
-            </Text>
-            <Text style={styles.qrAmount}>
-              {formatFcfa(creditBalance, lang)}
-            </Text>
-            <View style={styles.qrBg}>
-              {creditQrPayload && (
-                <QRCode value={creditQrPayload} size={220} backgroundColor="#fff" color="#000" />
-              )}
-            </View>
-            <Text style={[styles.qrInstruction, { color: colors.textSecondary }]}>
-              {lang === 'fr'
-                ? 'Présentez ce QR au restaurant. Le serveur le scannera pour appliquer votre crédit à votre addition.'
-                : 'Show this QR at the restaurant. The waiter scans it to apply your credit to the bill.'}
-            </Text>
+            {creditApplied ? (
+              <>
+                <View style={[styles.qrIconWrap, { backgroundColor: 'rgba(52,199,89,0.12)' }]}>
+                  <Ionicons name="checkmark-circle" size={32} color="#34C759" />
+                </View>
+                <Text style={[styles.qrTitle, { color: colors.textPrimary }]}>
+                  {lang === 'fr' ? 'Crédit utilisé !' : 'Credit used!'}
+                </Text>
+                <Text style={[styles.qrAmount, { color: '#34C759' }]}>
+                  −{formatFcfa(creditApplied.amount, lang)}
+                </Text>
+                <Text style={[styles.qrInstruction, { color: colors.textSecondary }]}>
+                  {lang === 'fr'
+                    ? `Appliqué à votre addition. Solde restant : ${formatFcfa(creditBalance, lang)}.`
+                    : `Applied to your bill. Remaining balance: ${formatFcfa(creditBalance, lang)}.`}
+                </Text>
+                <Pressable onPress={closeCreditQr} style={styles.qrDoneBtn}>
+                  <Text style={styles.qrDoneBtnText}>
+                    {lang === 'fr' ? 'Terminé' : 'Done'}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <View style={styles.qrIconWrap}>
+                  <Ionicons name="gift" size={22} color="#E8571A" />
+                </View>
+                <Text style={[styles.qrTitle, { color: colors.textPrimary }]}>
+                  {lang === 'fr' ? 'Mon crédit O\'Kili' : 'My O\'Kili credit'}
+                </Text>
+                <Text style={styles.qrAmount}>
+                  {formatFcfa(creditBalance, lang)}
+                </Text>
+                <View style={styles.qrBg}>
+                  {creditQrPayload && (
+                    <QRCode value={creditQrPayload} size={220} backgroundColor="#fff" color="#000" />
+                  )}
+                </View>
+                <Text style={[styles.qrInstruction, { color: colors.textSecondary }]}>
+                  {lang === 'fr'
+                    ? 'Présentez ce QR au restaurant. Le serveur le scannera pour appliquer votre crédit à votre addition.'
+                    : 'Show this QR at the restaurant. The waiter scans it to apply your credit to the bill.'}
+                </Text>
+              </>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -843,5 +906,13 @@ function createStyles(c: ThemeColors) {
       textAlign: 'center',
       maxWidth: 280,
     },
+    qrDoneBtn: {
+      marginTop: 4,
+      backgroundColor: '#34C759',
+      paddingHorizontal: 28,
+      paddingVertical: 12,
+      borderRadius: 999,
+    },
+    qrDoneBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   })
 }

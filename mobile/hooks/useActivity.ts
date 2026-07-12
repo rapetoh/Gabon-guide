@@ -62,11 +62,11 @@ export function useUserActivity(limit = 50) {
             redeemed_at,
             bill_amount,
             discount_applied,
+            place:places!coupon_redemptions_place_id_fkey ( id, name ),
             coupon:coupons!inner (
               id,
               title_fr,
-              title_en,
-              place:places!inner ( id, name )
+              title_en
             )
           `)
           .eq('user_id', session.user.id)
@@ -103,12 +103,16 @@ export function useUserActivity(limit = 50) {
       ))
       let refUsers: Record<string, string | null> = {}
       if (refIds.length > 0) {
+        // Read referee display name through the safe view (migration 025).
+        // The base `profiles` table is no longer publicly readable, so we
+        // no longer pull email here either — name is what the activity row
+        // actually renders.
         const { data: refProfiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
+          .from('profiles_public')
+          .select('id, full_name')
           .in('id', refIds)
         for (const p of refProfiles ?? []) {
-          refUsers[p.id] = (p as any).full_name?.trim() || (p as any).email || null
+          refUsers[p.id] = (p as any).full_name?.trim() || null
         }
       }
 
@@ -135,22 +139,22 @@ export function useUserActivity(limit = 50) {
         redeemed_at: string
         bill_amount: number | null
         discount_applied: number | null
+        place: { id: string; name: string } | null
         coupon: {
           id: string
           title_fr: string
           title_en: string | null
-          place: { id: string; name: string } | null
         } | null
       }
       const redItems: UserActivityItem[] = ((redRes.data ?? []) as unknown as RedRow[])
-        .filter(r => r.coupon && r.coupon.place && r.redeemed_at)
+        .filter(r => r.coupon && r.redeemed_at)
         .map(r => ({
           id: `red:${r.id}`,
           ts: r.redeemed_at!,
           kind: 'coupon_redemption' as const,
           amountFcfa: 0,
-          placeName: r.coupon!.place!.name,
-          placeId:   r.coupon!.place!.id,
+          placeName: r.place?.name ?? null,
+          placeId:   r.place?.id ?? null,
           couponTitleFr: r.coupon!.title_fr,
           couponTitleEn: r.coupon!.title_en,
           billAmount:      r.bill_amount,
@@ -203,12 +207,12 @@ export function useOwnerActivity(placeId: string | undefined, limit = 50) {
             redeemed_at,
             bill_amount,
             discount_applied,
-            coupon:coupons!inner ( id, title_fr, title_en, place_id )
+            coupon:coupons!inner ( id, title_fr, title_en )
           `)
+          .eq('place_id', placeId)
           .not('redeemed_at', 'is', null)
           .order('redeemed_at', { ascending: false })
-          .limit(limit * 2)  // overfetch since we filter by joined place_id
-          ,
+          .limit(limit),
         supabase
           .from('credit_transactions')
           .select('id, user_id, delta_fcfa, reason, created_at')
@@ -227,11 +231,10 @@ export function useOwnerActivity(placeId: string | undefined, limit = 50) {
         redeemed_at: string
         bill_amount: number | null
         discount_applied: number | null
-        coupon: { id: string; title_fr: string; title_en: string | null; place_id: string } | null
+        coupon: { id: string; title_fr: string; title_en: string | null } | null
       }
       const redRows = ((redRes.data ?? []) as unknown as RedRow[])
-        .filter(r => r.coupon && r.coupon.place_id === placeId)
-        .slice(0, limit)
+        .filter(r => r.coupon)
 
       const txRows = (txRes.data ?? []) as Array<{
         id: string
@@ -412,10 +415,8 @@ export function useAdminActivity(limit = 50) {
             redeemed_at,
             bill_amount,
             discount_applied,
-            coupon:coupons!inner (
-              title_fr,
-              place:places!inner ( name )
-            )
+            place:places!coupon_redemptions_place_id_fkey ( name ),
+            coupon:coupons!inner ( title_fr )
           `)
           .not('redeemed_at', 'is', null)
           .order('redeemed_at', { ascending: false })
@@ -466,7 +467,7 @@ export function useAdminActivity(limit = 50) {
         userName:  r.user_id ? profiles[r.user_id]?.name  ?? null : null,
         userEmail: r.user_id ? profiles[r.user_id]?.email ?? null : null,
         amountFcfa: 0,
-        placeName: r.coupon?.place?.name ?? null,
+        placeName: r.place?.name ?? null,
         couponTitle: r.coupon?.title_fr ?? null,
         billAmount: r.bill_amount,
         discountApplied: r.discount_applied,

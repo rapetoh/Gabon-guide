@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { useQueryClient } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +14,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
+
+import { supabase } from '../../lib/supabase'
 
 // Inline cap on the place detail page. Anything beyond this is moved into the
 // "Voir les N autres" sheet so the page doesn't become a coupon scroll-trap.
@@ -171,10 +174,13 @@ function QrModal({ visible, coupon, onClose }: QrModalProps) {
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const colors = useThemeColors()
   const startRedemption = useStartRedemption()
+  const qc = useQueryClient()
+  const { session } = useSession()
   const dLabel = coupon ? discountLabel(coupon, lang) : null
 
   const [redemption, setRedemption] = useState<CouponRedemption | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
+  const [applied, setApplied] = useState<{ discount: number | null; billAmount: number | null } | null>(null)
 
   // Always run startRedemption fresh when the modal opens.
   //
@@ -188,6 +194,7 @@ function QrModal({ visible, coupon, onClose }: QrModalProps) {
     if (!visible || !coupon) return
     setRedemption(null)
     setStartError(null)
+    setApplied(null)
     let cancelled = false
     startMutateAsync(coupon.id)
       .then(r => { if (!cancelled) setRedemption(r) })
@@ -195,9 +202,36 @@ function QrModal({ visible, coupon, onClose }: QrModalProps) {
     return () => { cancelled = true }
   }, [visible, coupon?.id, startMutateAsync])
 
+  // Realtime: when the owner applies this redemption on their device, the
+  // row's redeemed_at flips from null to a timestamp. We watch for that and
+  // swap the QR into a success state so the customer sees instant feedback.
+  useEffect(() => {
+    if (!visible || !redemption?.id || applied) return
+    const channel = supabase
+      .channel(`redemption:${redemption.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'coupon_redemptions', filter: `id=eq.${redemption.id}` },
+        payload => {
+          const row = payload.new as { redeemed_at: string | null; discount_applied: number | null; bill_amount: number | null }
+          if (row.redeemed_at) {
+            setApplied({ discount: row.discount_applied, billAmount: row.bill_amount })
+            qc.invalidateQueries({ queryKey: ['my-coupons', session?.user.id] })
+            qc.invalidateQueries({ queryKey: ['coupon-usage', coupon?.id, session?.user.id] })
+            qc.invalidateQueries({ queryKey: ['redemption-last', coupon?.id, session?.user.id] })
+            qc.invalidateQueries({ queryKey: ['user-activity', session?.user.id] })
+            qc.invalidateQueries({ queryKey: ['credit-balance', session?.user.id] })
+          }
+        },
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [visible, redemption?.id, applied, qc, coupon?.id, session?.user.id])
+
   function handleClose() {
     setRedemption(null)
     setStartError(null)
+    setApplied(null)
     onClose()
   }
 
@@ -256,7 +290,25 @@ function QrModal({ visible, coupon, onClose }: QrModalProps) {
           </View>
 
           <View style={styles.qrWrap}>
-            {startError ? (
+            {applied ? (
+              <View style={styles.qrPlaceholder}>
+                <Ionicons name="checkmark-circle" size={64} color="#34C759" />
+                <Text style={[styles.modalSubtitle, { color: colors.textPrimary, textAlign: 'center' }]}>
+                  {lang === 'fr' ? 'Coupon utilisé !' : 'Coupon used!'}
+                </Text>
+                {applied.discount != null && applied.discount > 0 ? (
+                  <Text style={[styles.modalMeta, { color: colors.textSecondary, textAlign: 'center', maxWidth: 240 }]}>
+                    {lang === 'fr'
+                      ? `Remise de ${applied.discount.toLocaleString('fr-FR')} FCFA appliquée à votre addition.`
+                      : `${applied.discount.toLocaleString('en-US')} FCFA discount applied to your bill.`}
+                  </Text>
+                ) : (
+                  <Text style={[styles.modalMeta, { color: colors.textSecondary, textAlign: 'center', maxWidth: 240 }]}>
+                    {lang === 'fr' ? 'Validé par le restaurant.' : 'Confirmed by the restaurant.'}
+                  </Text>
+                )}
+              </View>
+            ) : startError ? (
               <View style={styles.qrPlaceholder}>
                 <Ionicons name="alert-circle" size={48} color="#FF3B30" />
                 <Text style={[styles.modalSubtitle, { color: colors.textPrimary }]}>
@@ -282,13 +334,19 @@ function QrModal({ visible, coupon, onClose }: QrModalProps) {
             )}
           </View>
 
-          {!startError && payload && (
+          {applied ? (
+            <Pressable onPress={handleClose} style={styles.modalDoneBtn}>
+              <Text style={styles.modalDoneBtnText}>
+                {lang === 'fr' ? 'Terminé' : 'Done'}
+              </Text>
+            </Pressable>
+          ) : !startError && payload ? (
             <Text style={[styles.modalInstruction, { color: colors.textSecondary }]}>
               {lang === 'fr'
                 ? 'Présentez ce QR au restaurant pour utiliser le coupon.'
                 : 'Show this QR at the restaurant to redeem.'}
             </Text>
-          )}
+          ) : null}
         </Pressable>
       </Pressable>
     </Modal>
@@ -560,4 +618,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
   },
+
+  modalDoneBtn: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 999,
+  },
+  modalDoneBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 })
