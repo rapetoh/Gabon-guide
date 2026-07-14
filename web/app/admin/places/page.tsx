@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '../../../lib/supabase-server'
 import Topbar from '../../../components/admin/Topbar'
+import RestorePlaceButton from './RestorePlaceButton'
 
 export default async function PlacesPage({
   searchParams,
@@ -15,8 +16,8 @@ export default async function PlacesPage({
 
   let query = supabase
     .from('places')
-    .select('id, name, is_active, is_promoted, price_range, subscription_tier, created_at, categories(name_fr), zones(name)')
-    .eq('is_deleted', false)
+    .select('id, name, is_active, is_promoted, is_deleted, price_range, subscription_tier, created_at, categories(name_fr), zones(name)')
+    .eq('is_deleted', filter === 'deleted')
     .order('name', { ascending: true })
 
   if (filter === 'active') query = query.eq('is_active', true)
@@ -35,13 +36,14 @@ export default async function PlacesPage({
   // Counts for the filter chips (against unfiltered set in DB)
   const { data: countSet } = await supabase
     .from('places')
-    .select('id, is_active, is_promoted, subscription_tier')
-    .eq('is_deleted', false)
+    .select('id, is_active, is_promoted, is_deleted, subscription_tier')
+  const live = (countSet ?? []).filter(p => !p.is_deleted)
   const counts = {
-    all: countSet?.length ?? 0,
-    active: countSet?.filter(p => p.is_active).length ?? 0,
-    inactive: countSet?.filter(p => !p.is_active).length ?? 0,
-    promoted: countSet?.filter(p => p.is_promoted).length ?? 0,
+    all: live.length,
+    active: live.filter(p => p.is_active).length,
+    inactive: live.filter(p => !p.is_active).length,
+    promoted: live.filter(p => p.is_promoted).length,
+    deleted: (countSet ?? []).filter(p => p.is_deleted).length,
   }
 
   return (
@@ -86,6 +88,7 @@ export default async function PlacesPage({
             { key: 'active',    label: 'Active',    count: counts.active },
             { key: 'inactive',  label: 'Inactive',  count: counts.inactive },
             { key: 'promoted',  label: 'Promoted',  count: counts.promoted },
+            { key: 'deleted',   label: 'Supprimés', count: counts.deleted },
           ] as const).map(f => {
             const params = new URLSearchParams()
             if (f.key !== 'all') params.set('filter', f.key)
@@ -182,22 +185,32 @@ export default async function PlacesPage({
                       <TierPill tier={place.subscription_tier ?? 'free'} />
                     </td>
                     <td className="px-5 py-3">
-                      <StatusPill status={place.is_active ? 'active' : 'inactive'} />
+                      {place.is_deleted ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-100">Supprimé</span>
+                      ) : (
+                        <StatusPill status={place.is_active ? 'active' : 'inactive'} />
+                      )}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3 justify-end">
-                        <Link
-                          href={`/admin/places/${place.id}/photos`}
-                          className="text-xs text-gray-400 hover:text-gray-700"
-                        >
-                          Photos
-                        </Link>
-                        <Link
-                          href={`/admin/places/${place.id}`}
-                          className="text-xs text-orange-500 hover:text-orange-600 font-semibold"
-                        >
-                          Edit
-                        </Link>
+                        {place.is_deleted ? (
+                          <RestorePlaceButton id={place.id} />
+                        ) : (
+                          <>
+                            <Link
+                              href={`/admin/places/${place.id}/photos`}
+                              className="text-xs text-gray-400 hover:text-gray-700"
+                            >
+                              Photos
+                            </Link>
+                            <Link
+                              href={`/admin/places/${place.id}`}
+                              className="text-xs text-orange-500 hover:text-orange-600 font-semibold"
+                            >
+                              Edit
+                            </Link>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

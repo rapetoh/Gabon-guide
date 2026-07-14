@@ -275,6 +275,9 @@ export interface MyCouponEntry {
   discountValue: number | null
   expiresAt: string
   isPlatform: boolean
+  /** Platform coupons only: names of the places the coupon is scoped to
+   *  (via coupon_places). Empty = valid at every restaurant. */
+  scopePlaceNames: string[]
 }
 
 export function useMyCoupons() {
@@ -333,6 +336,30 @@ export function useMyCoupons() {
         } | null
       }
       const rows = (data ?? []) as unknown as Row[]
+
+      // Platform coupons can be scoped to specific places via coupon_places.
+      // Fetch the scope rows (joined to place names) in one query so the
+      // wallet card can say "Valable chez : X, Y, Z" instead of wrongly
+      // claiming the coupon works everywhere.
+      const platformIds = rows
+        .filter(r => r.coupon && r.coupon.place_id === null)
+        .map(r => r.coupon!.id)
+      const scopeNames = new Map<string, string[]>()
+      if (platformIds.length > 0) {
+        const { data: scopeRows, error: scopeErr } = await supabase
+          .from('coupon_places')
+          .select('coupon_id, place:places ( name )')
+          .in('coupon_id', platformIds)
+        if (scopeErr) throw scopeErr
+        type ScopeRow = { coupon_id: string; place: { name: string } | null }
+        for (const s of (scopeRows ?? []) as unknown as ScopeRow[]) {
+          if (!s.place?.name) continue
+          const list = scopeNames.get(s.coupon_id) ?? []
+          list.push(s.place.name)
+          scopeNames.set(s.coupon_id, list)
+        }
+      }
+
       return rows
         .filter(r => r.coupon)
         .map(r => {
@@ -351,6 +378,7 @@ export function useMyCoupons() {
             discountValue: r.coupon!.discount_value,
             expiresAt: r.coupon!.expires_at,
             isPlatform,
+            scopePlaceNames: isPlatform ? (scopeNames.get(r.coupon!.id) ?? []) : [],
           }
         })
         .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))
@@ -466,24 +494,19 @@ export interface ScannedCreditDetails {
 }
 
 export async function fetchCreditScanDetails(userId: string): Promise<ScannedCreditDetails | null> {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, full_name, email')
-    .eq('id', userId)
-    .maybeSingle()
-  if (!profile) return null
-
-  const { data: balance } = await supabase
-    .from('credit_balances')
-    .select('balance_fcfa')
-    .eq('user_id', userId)
-    .maybeSingle()
+  // RLS blocks owners from reading other users' profiles/balances directly,
+  // so the lookup goes through a SECURITY DEFINER RPC (migration 035) that
+  // admits admins and place owners only.
+  const { data, error } = await supabase.rpc('get_credit_scan_details', { p_user_id: userId })
+  if (error) throw error
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) return null
 
   return {
     userId,
-    customerName:  profile.full_name ?? null,
-    customerEmail: profile.email ?? null,
-    creditBalance: balance?.balance_fcfa ?? 0,
+    customerName:  row.full_name ?? null,
+    customerEmail: row.email ?? null,
+    creditBalance: row.balance_fcfa ?? 0,
   }
 }
 
@@ -512,6 +535,9 @@ export function useApplyRedemptionSession() {
       creditToUse: number
       billAmount: number
       placeId: string
+      // Stable per counter-session; lets the server reject a duplicate apply
+      // when the first one succeeded but the response was lost (migration 036).
+      idempotencyKey?: string
     }): Promise<ApplySessionResult> => {
       const { data, error } = await supabase.rpc('apply_redemption_session', {
         p_user_id: args.userId,
@@ -519,9 +545,10 @@ export function useApplyRedemptionSession() {
         p_credit_to_use: args.creditToUse,
         p_bill_amount: args.billAmount,
         p_place_id: args.placeId,
+        p_idempotency_key: args.idempotencyKey,
       })
       if (error) throw error
-      return data as ApplySessionResult
+      return data as unknown as ApplySessionResult
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['credit-balance', vars.userId] })

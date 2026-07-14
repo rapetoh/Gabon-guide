@@ -4,7 +4,7 @@
  */
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -27,7 +27,7 @@ import { useZones } from '../../hooks/useZones'
 const PRICE_LABELS: Record<number, string> = { 1: '$', 2: '$$', 3: '$$$' }
 
 export default function HomeScreen() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const insets = useSafeAreaInsets()
 
@@ -69,8 +69,17 @@ export default function HomeScreen() {
     feedRef.current?.scrollToOffset({ offset: 0, animated: false })
   }
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useVideoFeed(filters)
-  const feedItems = data?.pages.flat() ?? []
+  const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useVideoFeed(filters)
+  const feedItems = data?.pages.flatMap(page => page.items) ?? []
+
+  // With "Open now" active, a fetched page can filter down to zero items
+  // while more rows exist server-side. Keep fetching until we either have
+  // something to show or pagination genuinely ends.
+  useEffect(() => {
+    if (!openNow) return
+    if (isLoading || isFetchingNextPage || isError) return
+    if (feedItems.length === 0 && hasNextPage) fetchNextPage()
+  }, [openNow, isLoading, isFetchingNextPage, isError, feedItems.length, hasNextPage, fetchNextPage])
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -105,9 +114,20 @@ export default function HomeScreen() {
     <View style={styles.container}>
 
       {/* ── Feed list ── */}
-      {isLoading ? (
+      {isLoading || (feedItems.length === 0 && (isFetchingNextPage || (hasNextPage && !isError))) ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#E8571A" />
+        </View>
+      ) : isError ? (
+        <View style={styles.center}>
+          <Ionicons name="cloud-offline-outline" size={40} color="rgba(255,255,255,0.3)" />
+          <Text style={styles.emptyText}>{t('errors.offline')}</Text>
+          <Text style={styles.emptyHint}>{t('errors.offlineHint')}</Text>
+          <Pressable style={styles.resetBtn} onPress={() => refetch()}>
+            <Text style={styles.resetBtnText}>
+              {lang === 'fr' ? 'Réessayer' : 'Retry'}
+            </Text>
+          </Pressable>
         </View>
       ) : feedItems.length === 0 ? (
         <View style={styles.center}>
@@ -311,6 +331,10 @@ const styles = StyleSheet.create({
   emptyText: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 16,
+  },
+  emptyHint: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
   },
   resetBtn: {
     marginTop: 4,

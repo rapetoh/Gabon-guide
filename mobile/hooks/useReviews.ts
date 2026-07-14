@@ -1,7 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert } from 'react-native'
 
+import i18n from '../lib/i18n'
 import { supabase } from '../lib/supabase'
 import { useSession } from './useSession'
+
+// Shows a French/English alert when a review mutation fails. RLS refusals
+// (e.g. blocked accounts) get a specific message; everything else gets a
+// generic "check your connection" hint.
+export function showMutationErrorAlert(err: unknown) {
+  const lang = i18n.language === 'en' ? 'en' : 'fr'
+  const e = err as { code?: string; message?: string }
+  const isRlsRefusal =
+    e?.code === '42501' || (e?.message ?? '').toLowerCase().includes('row-level security')
+  Alert.alert(
+    lang === 'fr' ? 'Erreur' : 'Error',
+    isRlsRefusal
+      ? (lang === 'fr'
+          ? 'Votre compte ne permet pas cette action.'
+          : 'Your account is not allowed to do this.')
+      : (lang === 'fr'
+          ? 'Échec — vérifiez votre connexion et réessayez.'
+          : 'Failed — check your connection and try again.'),
+  )
+}
 
 // Explicit type for review rows returned with a profiles join.
 // Supabase's type inference for nested selects requires Relationships metadata
@@ -13,6 +35,9 @@ export interface ReviewWithProfile {
   owner_reply: string | null
   owner_reply_at: string | null
   created_at: string
+  // Snapshot of the author's name taken at account deletion (migration 027) —
+  // used as the display fallback when the profiles join is null.
+  author_display_name: string | null
   profiles: {
     id: string
     full_name: string | null
@@ -32,12 +57,12 @@ export function useReviews(placeId: string) {
     queryFn: async () => {
       const { data: rows, error } = await supabase
         .from('reviews')
-        .select('id, user_id, rating, comment, owner_reply, owner_reply_at, created_at')
+        .select('id, user_id, rating, comment, owner_reply, owner_reply_at, created_at, author_display_name')
         .eq('place_id', placeId)
         .order('created_at', { ascending: false })
       if (error) throw error
 
-      const reviewRows = (rows ?? []) as Array<{
+      const reviewRows = (rows ?? []) as unknown as Array<{
         id: string
         user_id: string
         rating: number
@@ -45,6 +70,7 @@ export function useReviews(placeId: string) {
         owner_reply: string | null
         owner_reply_at: string | null
         created_at: string
+        author_display_name: string | null
       }>
 
       const userIds = Array.from(new Set(reviewRows.map(r => r.user_id).filter(Boolean)))
@@ -66,6 +92,7 @@ export function useReviews(placeId: string) {
         owner_reply: r.owner_reply,
         owner_reply_at: r.owner_reply_at,
         created_at: r.created_at,
+        author_display_name: r.author_display_name,
         profiles: profileById.get(r.user_id) ?? null,
       }))
 
@@ -143,6 +170,7 @@ export function useSubmitReview(placeId: string) {
       queryClient.invalidateQueries({ queryKey: ['reviews', placeId] })
       queryClient.invalidateQueries({ queryKey: ['userReview', placeId, session?.user.id] })
     },
+    onError: showMutationErrorAlert,
   })
 }
 
@@ -166,5 +194,6 @@ export function useDeleteReview(placeId: string) {
       queryClient.invalidateQueries({ queryKey: ['reviews', placeId] })
       queryClient.invalidateQueries({ queryKey: ['userReview', placeId, session?.user.id] })
     },
+    onError: showMutationErrorAlert,
   })
 }

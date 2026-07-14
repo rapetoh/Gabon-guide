@@ -112,7 +112,7 @@ export function useUserActivity(limit = 50) {
           .select('id, full_name')
           .in('id', refIds)
         for (const p of refProfiles ?? []) {
-          refUsers[p.id] = (p as any).full_name?.trim() || null
+          if (p.id) refUsers[p.id] = (p as any).full_name?.trim() || null
         }
       }
 

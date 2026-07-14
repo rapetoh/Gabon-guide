@@ -362,6 +362,44 @@ export function useCreatePlatformCoupon() {
   })
 }
 
+// Total redemption rows for a coupon — claimed QRs, redeemed or not.
+// The owner UI pairs this with useCouponUsage (redeemed only) to show
+// "N réclamés · M utilisés / quota".
+export function useCouponClaimedCount(couponId: string | undefined) {
+  return useQuery({
+    queryKey: ['coupon-claimed-count', couponId],
+    queryFn: async () => {
+      if (!couponId) return 0
+      const { count, error } = await supabase
+        .from('coupon_redemptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('coupon_id', couponId)
+      if (error) throw error
+      return count ?? 0
+    },
+    enabled: !!couponId,
+    staleTime: 5_000,
+  })
+}
+
+// Admin: flip is_active on any coupon (platform or place-owned).
+export function useAdminSetCouponActive() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { id: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from('coupons')
+        .update({ is_active: args.isActive } as any)
+        .eq('id', args.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-coupons'] })
+      qc.invalidateQueries({ queryKey: ['coupons'] })
+    },
+  })
+}
+
 export function useDeletePlatformCoupon() {
   const qc = useQueryClient()
   return useMutation({
@@ -389,6 +427,26 @@ export function useAllPlacesLite() {
       if (error) throw error
       return (data ?? []) as Array<{ id: string; name: string }>
     },
+    staleTime: 60_000,
+  })
+}
+
+// Active, non-deleted places (id + name) — used by the admin scanner's
+// place picker so an admin can choose which restaurant they scan for.
+export function useActivePlacesLite(enabled: boolean) {
+  return useQuery({
+    queryKey: ['active-places-lite'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('places')
+        .select('id, name')
+        .eq('is_deleted', false)
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as Array<{ id: string; name: string }>
+    },
+    enabled,
     staleTime: 60_000,
   })
 }

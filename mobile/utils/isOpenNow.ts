@@ -38,9 +38,10 @@ export function isOpenNow(hours: PlaceHours | null, now?: Date): boolean {
   const currentMinutes = libNow.getHours() * 60 + libNow.getMinutes()
 
   const todayKey = DAY_KEYS[dayIndex]
-  const today: DayHours = hours[todayKey]
+  // Guard against malformed hours objects missing a day key
+  const today: DayHours | undefined = hours[todayKey]
 
-  if (today.closed) return false
+  if (!today || today.closed) return false
 
   const openMinutes = toMinutes(today.open)
   const closeMinutes = toMinutes(today.close)
@@ -55,9 +56,9 @@ export function isOpenNow(hours: PlaceHours | null, now?: Date): boolean {
     // This uses yesterday's overnight flag
     const yesterdayIndex = (dayIndex + 6) % 7
     const yesterdayKey = DAY_KEYS[yesterdayIndex]
-    const yesterday: DayHours = hours[yesterdayKey]
+    const yesterday: DayHours | undefined = hours[yesterdayKey]
 
-    if (yesterday.overnight && !yesterday.closed) {
+    if (yesterday && yesterday.overnight && !yesterday.closed) {
       const yesterdayCloseMinutes = toMinutes(yesterday.close)
       return currentMinutes < yesterdayCloseMinutes
     }

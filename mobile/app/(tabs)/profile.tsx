@@ -5,14 +5,17 @@ import AppBackground from '../../components/AppBackground'
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useMemo, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -24,6 +27,7 @@ import { useProfile } from '../../hooks/useProfile'
 import { useMyReferral } from '../../hooks/useReferrals'
 import { useCreditBalance } from '../../hooks/useCredit'
 import { encodeCreditQrPayload, useMyCoupons, type MyCouponEntry } from '../../hooks/useCouponRedemption'
+import { CouponQrModal } from '../../components/place/CouponsBlock'
 import { supabase } from '../../lib/supabase'
 import { ThemeColors, AppTheme } from '../../constants/themes'
 
@@ -41,6 +45,11 @@ function formatExpiry(iso: string, lang: 'fr' | 'en'): string {
   return new Date(iso).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
     day: 'numeric', month: 'short',
   })
+}
+
+// "X, Y, Z…" — at most 3 scope place names on a wallet card.
+function scopeNamesLabel(names: string[]): string {
+  return names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '')
 }
 
 const THEME_OPTIONS: { key: AppTheme; labelFr: string; labelEn: string }[] = [
@@ -65,10 +74,35 @@ export default function ProfileScreen() {
 
   const [creditQrOpen, setCreditQrOpen] = useState(false)
   const [creditApplied, setCreditApplied] = useState<{ amount: number } | null>(null)
+  const [walletCoupon, setWalletCoupon] = useState<MyCouponEntry | null>(null)
+  const [referralPromptOpen, setReferralPromptOpen] = useState(false)
+  const [referralCodeInput, setReferralCodeInput] = useState('')
+  const [claimingCode, setClaimingCode] = useState(false)
   const qc = useQueryClient()
 
   const creditBalance = credit?.balance_fcfa ?? 0
   const creditQrPayload = session?.user.id ? encodeCreditQrPayload({ userId: session.user.id }) : null
+
+  // Late referral-code entry (OAuth signups never see the signup form's code
+  // field). Only offered while the server-side claim window is open: no
+  // referrer yet + account created in the last 7 days (migration 037).
+  const { data: claimProfile } = useQuery({
+    queryKey: ['late-referral-eligibility', session?.user.id],
+    queryFn: async () => {
+      if (!session) return null
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('referred_by, created_at')
+        .eq('id', session.user.id)
+        .maybeSingle()
+      if (error) throw error
+      return (data as { referred_by: string | null; created_at: string } | null) ?? null
+    },
+    enabled: !!session,
+  })
+  const canClaimReferral = !!claimProfile
+    && claimProfile.referred_by === null
+    && Date.now() - new Date(claimProfile.created_at).getTime() < 7 * 24 * 60 * 60 * 1000
 
   // Realtime: while the credit QR modal is open, watch for the owner
   // applying a credit deduction (a credit_transactions INSERT with reason
@@ -111,6 +145,76 @@ export default function ProfileScreen() {
       })
     } catch {
       // User cancelled — silent
+    }
+  }
+
+  // ── Late referral-code claim ────────────────────────────────────
+  function claimErrorMessage(raw: string): string {
+    if (raw.includes('ALREADY_REFERRED')) {
+      return lang === 'fr' ? 'Un code a déjà été utilisé pour ce compte.' : 'A code has already been used for this account.'
+    }
+    if (raw.includes('CODE_NOT_FOUND')) {
+      return lang === 'fr' ? 'Code introuvable.' : 'Code not found.'
+    }
+    if (raw.includes('SELF_REFERRAL')) {
+      return lang === 'fr' ? 'Vous ne pouvez pas utiliser votre propre code.' : 'You cannot use your own code.'
+    }
+    if (raw.includes('CLAIM_WINDOW_CLOSED')) {
+      return lang === 'fr' ? 'La période pour saisir un code est passée.' : 'The window to enter a code has passed.'
+    }
+    return t('errors.generic')
+  }
+
+  async function submitReferralClaim(raw: string) {
+    const code = raw.trim().toUpperCase()
+    if (!code || claimingCode) return
+    setClaimingCode(true)
+    try {
+      // Cast: claim_referral_code (migration 037) isn't in the hand-written
+      // database.types Functions yet.
+      const { error } = await (supabase.rpc as any)('claim_referral_code', { p_code: code })
+      if (error) throw error
+      setReferralPromptOpen(false)
+      setReferralCodeInput('')
+      Alert.alert(
+        lang === 'fr' ? 'Code appliqué !' : 'Code applied!',
+        lang === 'fr'
+          ? 'Vous recevez votre crédit de bienvenue.'
+          : 'You are receiving your welcome credit.',
+      )
+      const userId = session?.user.id
+      qc.invalidateQueries({ queryKey: ['late-referral-eligibility', userId] })
+      qc.invalidateQueries({ queryKey: ['my-referral', userId] })
+      qc.invalidateQueries({ queryKey: ['credit-balance', userId] })
+      qc.invalidateQueries({ queryKey: ['credit-transactions', userId] })
+      qc.invalidateQueries({ queryKey: ['user-activity', userId] })
+    } catch (e: any) {
+      Alert.alert(
+        lang === 'fr' ? 'Code non appliqué' : 'Code not applied',
+        claimErrorMessage(e?.message ?? ''),
+      )
+    } finally {
+      setClaimingCode(false)
+    }
+  }
+
+  function openReferralPrompt() {
+    if (Platform.OS === 'ios') {
+      // Alert.prompt is iOS-only; Android gets the small modal below.
+      Alert.prompt(
+        lang === 'fr' ? 'Code de parrainage' : 'Referral code',
+        lang === 'fr'
+          ? 'Saisissez le code de la personne qui vous a invité.'
+          : 'Enter the code of the person who invited you.',
+        [
+          { text: lang === 'fr' ? 'Annuler' : 'Cancel', style: 'cancel' },
+          { text: 'OK', onPress: (code?: string) => { if (code) submitReferralClaim(code) } },
+        ],
+        'plain-text',
+      )
+    } else {
+      setReferralCodeInput('')
+      setReferralPromptOpen(true)
     }
   }
 
@@ -220,7 +324,7 @@ export default function ProfileScreen() {
         {/* Welcome credit + referral combined card.
             Surfaced whenever the user is signed in and either has credit
             or a referral code to share. */}
-        {session && (creditBalance > 0 || referral?.code) && (
+        {session && (creditBalance > 0 || referral?.code || canClaimReferral) && (
           <View style={styles.creditCard}>
             <View style={styles.creditHeader}>
               <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
@@ -270,6 +374,19 @@ export default function ProfileScreen() {
                 {t('referral.invited', { count: referral.invitedCount })}
               </Text>
             )}
+            {canClaimReferral && (
+              <Pressable
+                onPress={openReferralPrompt}
+                style={styles.creditActivityLink}
+                disabled={claimingCode}
+              >
+                <Ionicons name="ticket-outline" size={14} color="#E8571A" />
+                <Text style={styles.creditActivityLinkText}>
+                  {lang === 'fr' ? 'Vous avez un code de parrainage ?' : 'Have a referral code?'}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color="#E8571A" />
+              </Pressable>
+            )}
             <Pressable
               onPress={() => router.push('/account/activity' as any)}
               style={styles.creditActivityLink}
@@ -299,10 +416,7 @@ export default function ProfileScreen() {
                   <Pressable
                     key={c.redemptionId}
                     style={styles.myCouponCard}
-                    onPress={() => {
-                      if (c.placeId) router.push(`/place/${c.placeId}` as any)
-                    }}
-                    disabled={!c.placeId}
+                    onPress={() => setWalletCoupon(c)}
                   >
                     <View style={styles.myCouponBorder} />
                     <View style={styles.myCouponBody}>
@@ -317,16 +431,16 @@ export default function ProfileScreen() {
                       <Text style={styles.myCouponTitle} numberOfLines={2}>
                         {lang === 'en' && c.titleEn ? c.titleEn : c.titleFr}
                       </Text>
-                      <Text style={styles.myCouponMeta}>
+                      <Text style={styles.myCouponMeta} numberOfLines={2}>
                         {c.isPlatform
-                          ? (lang === 'fr' ? 'Valable dans tous les restaurants · Expire le ' : 'Valid at any restaurant · Until ')
+                          ? (c.scopePlaceNames.length > 0
+                              ? `${lang === 'fr' ? 'Valable chez : ' : 'Valid at: '}${scopeNamesLabel(c.scopePlaceNames)}${lang === 'fr' ? ' · Expire le ' : ' · Until '}`
+                              : (lang === 'fr' ? 'Valable dans tous les restaurants · Expire le ' : 'Valid at any restaurant · Until '))
                           : (lang === 'fr' ? 'Expire le ' : 'Until ')}
                         {formatExpiry(c.expiresAt, lang)}
                       </Text>
                     </View>
-                    {c.placeId && (
-                      <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} style={styles.myCouponChevron} />
-                    )}
+                    <Ionicons name="qr-code-outline" size={18} color={colors.iconMuted} style={styles.myCouponChevron} />
                   </Pressable>
                 )
               })}
@@ -334,10 +448,16 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Restaurant owner section */}
-        {role === 'restaurant_owner' && (
+        {/* Restaurant owner / admin section — the coupon scanner is available
+            to both (admins can validate platform coupons anywhere); only
+            owners get the restaurant-management row. */}
+        {(role === 'restaurant_owner' || role === 'admin' || isAdmin) && (
           <View style={styles.settingsSection}>
-            <Text style={styles.settingsHeader}>{lang === 'fr' ? 'Mon restaurant' : 'My Restaurant'}</Text>
+            <Text style={styles.settingsHeader}>
+              {role === 'restaurant_owner'
+                ? (lang === 'fr' ? 'Mon restaurant' : 'My Restaurant')
+                : (lang === 'fr' ? 'Coupons' : 'Coupons')}
+            </Text>
             <Pressable style={styles.row} onPress={() => router.push('/restaurant-admin/scanner' as any)}>
               <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.12)' }]}>
                 <Ionicons name="scan" size={18} color="#E8571A" />
@@ -352,15 +472,17 @@ export default function ProfileScreen() {
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
             </Pressable>
-            <Pressable style={styles.row} onPress={() => router.push('/restaurant-admin' as any)}>
-              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
-                <Ionicons name="storefront-outline" size={18} color="#E8571A" />
-              </View>
-              <Text style={styles.rowLabel}>
-                {lang === 'fr' ? 'Gérer mon restaurant' : 'Manage My Restaurant'}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
-            </Pressable>
+            {role === 'restaurant_owner' && (
+              <Pressable style={styles.row} onPress={() => router.push('/restaurant-admin' as any)}>
+                <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
+                  <Ionicons name="storefront-outline" size={18} color="#E8571A" />
+                </View>
+                <Text style={styles.rowLabel}>
+                  {lang === 'fr' ? 'Gérer mon restaurant' : 'Manage My Restaurant'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -505,6 +627,70 @@ export default function ProfileScreen() {
                 </Text>
               </>
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Wallet coupon QR — same modal as the place page. It reuses (or
+          mints) the user's open redemption row server-side, so the QR the
+          owner scans is always the live code. */}
+      <CouponQrModal
+        visible={walletCoupon !== null}
+        coupon={walletCoupon ? {
+          id: walletCoupon.couponId,
+          title_fr: walletCoupon.titleFr,
+          title_en: walletCoupon.titleEn,
+          discount_type: walletCoupon.discountType,
+          discount_value: walletCoupon.discountValue,
+        } : null}
+        onClose={() => setWalletCoupon(null)}
+      />
+
+      {/* Android referral-code prompt — Alert.prompt is iOS-only. */}
+      <Modal
+        visible={referralPromptOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReferralPromptOpen(false)}
+      >
+        <Pressable style={styles.qrBackdrop} onPress={() => setReferralPromptOpen(false)}>
+          <Pressable style={styles.qrCard} onPress={() => {/* swallow */}}>
+            <Text style={[styles.qrTitle, { color: colors.textPrimary }]}>
+              {lang === 'fr' ? 'Code de parrainage' : 'Referral code'}
+            </Text>
+            <Text style={[styles.qrInstruction, { color: colors.textSecondary }]}>
+              {lang === 'fr'
+                ? 'Saisissez le code de la personne qui vous a invité.'
+                : 'Enter the code of the person who invited you.'}
+            </Text>
+            <TextInput
+              style={styles.codeInput}
+              value={referralCodeInput}
+              onChangeText={setReferralCodeInput}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder="OKILI123"
+              placeholderTextColor={colors.textPlaceholder}
+              autoFocus
+            />
+            <View style={{ flexDirection: 'row', gap: 8, alignSelf: 'stretch' }}>
+              <Pressable style={styles.creditSecondaryBtn} onPress={() => setReferralPromptOpen(false)}>
+                <Text style={styles.creditSecondaryBtnText}>
+                  {lang === 'fr' ? 'Annuler' : 'Cancel'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.creditPrimaryBtn, (!referralCodeInput.trim() || claimingCode) && { opacity: 0.5 }]}
+                onPress={() => submitReferralClaim(referralCodeInput)}
+                disabled={!referralCodeInput.trim() || claimingCode}
+              >
+                <Text style={styles.creditPrimaryBtnText}>
+                  {claimingCode
+                    ? (lang === 'fr' ? 'Envoi…' : 'Sending…')
+                    : (lang === 'fr' ? 'Valider' : 'Apply')}
+                </Text>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -859,6 +1045,22 @@ function createStyles(c: ThemeColors) {
     myCouponTitle: { fontSize: 14, fontWeight: '600', color: c.textPrimary, lineHeight: 18 },
     myCouponMeta: { fontSize: 11, color: c.textSecondary, marginTop: 2 },
     myCouponChevron: { marginRight: 10 },
+
+    // ── Android referral-code prompt ───────────────────────────
+    codeInput: {
+      alignSelf: 'stretch',
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.inputText,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 16,
+      fontWeight: '700',
+      letterSpacing: 2,
+      textAlign: 'center',
+    },
 
     // ── Credit QR modal ────────────────────────────────────────
     qrBackdrop: {

@@ -22,6 +22,7 @@ import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import {
   Coupon,
+  useCouponClaimedCount,
   useCouponsForPlace,
   useCreateCoupon,
   useDeleteCoupon,
@@ -79,9 +80,13 @@ function discountLabel(c: Coupon, lang: 'fr' | 'en'): string | null {
 function CouponInfoRow({ coupon, lang }: { coupon: Coupon; lang: 'fr' | 'en' }) {
   const colors = useThemeColors()
   const { data: usage } = useCouponUsage(coupon.id)
+  // All redemption rows (claimed QRs), redeemed or not — claimed-but-unused
+  // QRs are commitments the owner should see coming.
+  const { data: claimedCount } = useCouponClaimedCount(coupon.id)
   const label = discountLabel(coupon, lang)
 
   const totalUsed = usage?.totalRedeemed ?? 0
+  const claimed = claimedCount ?? 0
   const cap = coupon.max_total_redemptions
   const soldOut = cap !== null && totalUsed >= cap
 
@@ -94,8 +99,11 @@ function CouponInfoRow({ coupon, lang }: { coupon: Coupon; lang: 'fr' | 'en' }) 
         </View>
       )}
       <Text style={[styles.usageText, { color: colors.textSecondary }]}>
+        {lang === 'fr'
+          ? `${claimed} réclamé${claimed > 1 ? 's' : ''} · `
+          : `${claimed} claimed · `}
         {cap !== null
-          ? (lang === 'fr' ? `${totalUsed} / ${cap} utilisés` : `${totalUsed} / ${cap} used`)
+          ? (lang === 'fr' ? `${totalUsed} utilisés / ${cap}` : `${totalUsed} used / ${cap}`)
           : (lang === 'fr' ? `${totalUsed} utilisé(s)` : `${totalUsed} used`)}
         {coupon.max_redemptions_per_user > 1
           ? (lang === 'fr'

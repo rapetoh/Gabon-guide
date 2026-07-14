@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { supabase } from '../lib/supabase'
+import { showMutationErrorAlert } from './useReviews'
 import { useSession } from './useSession'
 
 // Manages the current user's saved/favorite places.
@@ -47,6 +48,9 @@ export function useFavorites() {
       // Refresh favorites list after toggle
       queryClient.invalidateQueries({ queryKey: ['favorites', session?.user.id] })
     },
+    // Surface failures (RLS refusal for blocked accounts, network errors) —
+    // covers every caller: place detail, video feed card, favorites tab.
+    onError: showMutationErrorAlert,
   })
 
   return { favoriteIds, isFavorite, toggleFavorite }

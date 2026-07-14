@@ -26,11 +26,22 @@ import {
   type ScannedCouponDetails,
   type ScannedCreditDetails,
 } from '../../hooks/useCouponRedemption'
-import { useOwnedPlaceId } from '../../hooks/useCoupons'
+import { useActivePlacesLite, useOwnedPlaceId } from '../../hooks/useCoupons'
+import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { useSession } from '../../hooks/useSession'
 
 const BARCODE_SETTINGS: BarcodeSettings = { barcodeTypes: ['qr'] }
 const ORANGE = '#E8571A'
+
+// Session idempotency key — dedupe only, not security, so a Math.random
+// v4 is fine (crypto.randomUUID is unavailable in Hermes and expo-crypto
+// is not a direct dependency).
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
 
 type CouponItem = {
   kind: 'coupon'
@@ -52,6 +63,9 @@ type SessionState = {
   customerName: string | null
   customerEmail: string | null
   items: SessionItem[]
+  // Minted when the first item lands in an empty session; passed to the
+  // apply RPC so a retried request can't double-apply. Reset on clear.
+  idempotencyKey: string | null
 }
 
 const EMPTY_SESSION: SessionState = {
@@ -59,6 +73,7 @@ const EMPTY_SESSION: SessionState = {
   customerName: null,
   customerEmail: null,
   items: [],
+  idempotencyKey: null,
 }
 
 function formatFcfa(n: number, lang: 'fr' | 'en'): string {
@@ -75,9 +90,20 @@ export default function CouponScanner() {
   const { i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const { session } = useSession()
-  const { data: ownedPlaceId } = useOwnedPlaceId()
+  const { data: ownedPlaceId, isLoading: ownedPlaceLoading } = useOwnedPlaceId()
+  const { isAdmin, role, loading: roleLoading } = useIsAdmin()
   const [permission, requestPermission] = useCameraPermissions()
   const apply = useApplyRedemptionSession()
+
+  // Admins have no owned place — they pick which restaurant they scan for.
+  // Owners keep the automatic behavior (their own place).
+  const [adminPlaceId, setAdminPlaceId] = useState<string | null>(null)
+  const adminMode = (isAdmin || role === 'admin') && !ownedPlaceId
+  const { data: pickablePlaces, isLoading: placesLoading } = useActivePlacesLite(adminMode)
+  const activePlaceId = ownedPlaceId ?? (adminMode ? adminPlaceId : null)
+  const adminPlaceName = adminMode
+    ? pickablePlaces?.find(p => p.id === adminPlaceId)?.name ?? null
+    : null
 
   const [sessionState, setSessionState] = useState<SessionState>(EMPTY_SESSION)
   const [scanError, setScanError] = useState<string | null>(null)
@@ -102,8 +128,9 @@ export default function CouponScanner() {
       catch { setScanError(lang === 'fr' ? 'Erreur réseau' : 'Network error'); return }
       if (!details) { setScanError(lang === 'fr' ? 'Code introuvable' : 'Code not found'); return }
 
-      // Place must match the owner's place
-      if (ownedPlaceId && details.placeId !== ownedPlaceId) {
+      // Place must match the owner's place. Platform coupons have no place
+      // (placeId null) — their scope is enforced server-side at apply time.
+      if (activePlaceId && details.placeId && details.placeId !== activePlaceId) {
         setScanError(lang === 'fr' ? 'Ce coupon est d\'un autre restaurant' : 'This coupon belongs to another place')
         return
       }
@@ -131,6 +158,7 @@ export default function CouponScanner() {
         userId:        details.userId,
         customerName:  s.customerName  ?? details.customerName,
         customerEmail: s.customerEmail ?? details.customerEmail,
+        idempotencyKey: s.idempotencyKey ?? uuidv4(),
         items: [...s.items, {
           kind: 'coupon',
           redemptionId: details.redemptionId,
@@ -176,10 +204,11 @@ export default function CouponScanner() {
       userId: cdet.userId,
       customerName:  s2.customerName  ?? cdet.customerName,
       customerEmail: s2.customerEmail ?? cdet.customerEmail,
+      idempotencyKey: s2.idempotencyKey ?? uuidv4(),
       items: [...s2.items, { kind: 'credit', balance: cdet.creditBalance }],
     })
     setScanError(null)
-  }, [lang, ownedPlaceId])
+  }, [lang, activePlaceId])
 
   const onBarcodeScanned = useCallback((event: { data: string }) => {
     const raw = event?.data ?? ''
@@ -231,6 +260,87 @@ export default function CouponScanner() {
     )
   }
 
+  // ─── Place resolution states ────────────────────────────────────
+  if (roleLoading || ownedPlaceLoading) {
+    return (
+      <SafeAreaView style={styles.permRoot}>
+        <View style={styles.center}><ActivityIndicator color="#fff" /></View>
+      </SafeAreaView>
+    )
+  }
+
+  // Owner account with no linked restaurant — no point showing the camera.
+  if (!adminMode && !activePlaceId) {
+    return (
+      <SafeAreaView style={styles.permRoot}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="chevron-back" size={24} color="#fff" />
+          </Pressable>
+          <Text style={styles.headerTitle}>
+            {lang === 'fr' ? 'Scanner' : 'Scan'}
+          </Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.center}>
+          <Ionicons name="storefront-outline" size={48} color="rgba(255,255,255,0.5)" />
+          <Text style={styles.permTitle}>
+            {lang === 'fr' ? 'Aucun restaurant' : 'No restaurant'}
+          </Text>
+          <Text style={styles.permText}>
+            {lang === 'fr'
+              ? 'Aucun restaurant associé à votre compte. Contactez O\'Kili pour lier votre établissement.'
+              : 'No restaurant is linked to your account. Contact O\'Kili to link your place.'}
+          </Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // Admin without a picked place — choose which restaurant to scan for.
+  if (adminMode && !activePlaceId) {
+    return (
+      <SafeAreaView style={styles.permRoot}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="chevron-back" size={24} color="#fff" />
+          </Pressable>
+          <Text style={styles.headerTitle}>
+            {lang === 'fr' ? 'Choisir un restaurant' : 'Pick a restaurant'}
+          </Text>
+          <View style={{ width: 24 }} />
+        </View>
+        {placesLoading ? (
+          <View style={styles.center}><ActivityIndicator color="#fff" /></View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.pickerList}>
+            <Text style={styles.pickerHint}>
+              {lang === 'fr'
+                ? 'Pour quel restaurant encaissez-vous ?'
+                : 'Which restaurant are you scanning for?'}
+            </Text>
+            {(pickablePlaces ?? []).map(p => (
+              <Pressable
+                key={p.id}
+                onPress={() => setAdminPlaceId(p.id)}
+                style={styles.pickerRow}
+              >
+                <Ionicons name="storefront-outline" size={18} color={ORANGE} />
+                <Text style={styles.pickerRowText} numberOfLines={1}>{p.name}</Text>
+                <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
+              </Pressable>
+            ))}
+            {(pickablePlaces ?? []).length === 0 && (
+              <Text style={styles.permText}>
+                {lang === 'fr' ? 'Aucun restaurant actif.' : 'No active restaurant.'}
+              </Text>
+            )}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    )
+  }
+
   const itemCount = sessionState.items.length
   const hasItems = itemCount > 0
   const hasCredit = sessionState.items.some(i => i.kind === 'credit')
@@ -251,9 +361,22 @@ export default function CouponScanner() {
           <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color="#fff" />
           </Pressable>
-          <Text style={styles.headerTitle}>
-            {lang === 'fr' ? 'Scanner' : 'Scan'}
-          </Text>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={styles.headerTitle}>
+              {lang === 'fr' ? 'Scanner' : 'Scan'}
+            </Text>
+            {adminMode && adminPlaceName && (
+              <Pressable
+                onPress={() => { setSessionState(EMPTY_SESSION); setAdminPlaceId(null) }}
+                hitSlop={8}
+                style={styles.placeStrip}
+              >
+                <Ionicons name="storefront-outline" size={11} color="#fff" />
+                <Text style={styles.placeStripText} numberOfLines={1}>{adminPlaceName}</Text>
+                <Ionicons name="swap-horizontal" size={11} color="rgba(255,255,255,0.7)" />
+              </Pressable>
+            )}
+          </View>
           <View style={{ width: 40 }} />
         </View>
 
@@ -314,10 +437,12 @@ export default function CouponScanner() {
                     onPress={() => setSessionState(prev => ({
                       ...prev,
                       items: prev.items.filter((_, i) => i !== idx),
-                      // If we just removed the last item, reset customer lock too
+                      // If we just removed the last item, reset customer lock
+                      // and the idempotency key — a fresh session gets a fresh key
                       userId: prev.items.length === 1 ? null : prev.userId,
                       customerName:  prev.items.length === 1 ? null : prev.customerName,
                       customerEmail: prev.items.length === 1 ? null : prev.customerEmail,
+                      idempotencyKey: prev.items.length === 1 ? null : prev.idempotencyKey,
                     }))}
                   >
                     <Ionicons name="close" size={12} color="rgba(255,255,255,0.7)" />
@@ -344,13 +469,13 @@ export default function CouponScanner() {
       <ReviewModal
         visible={reviewing}
         session={sessionState}
-        placeId={ownedPlaceId ?? null}
+        placeId={activePlaceId ?? null}
         applyPending={apply.isPending}
         applyResult={apply.isSuccess ? apply.data : null}
         applyError={apply.isError ? (apply.error as Error)?.message ?? 'UNKNOWN' : null}
         onClose={() => setReviewing(false)}
         onApply={async (billAmount, creditToUse) => {
-          if (!session || !ownedPlaceId || !sessionState.userId) return
+          if (!session || !activePlaceId || !sessionState.userId) return
           const redemptionIds = sessionState.items
             .filter((i): i is CouponItem => i.kind === 'coupon')
             .map(i => i.redemptionId)
@@ -359,7 +484,8 @@ export default function CouponScanner() {
             redemptionIds,
             creditToUse: hasCredit ? creditToUse : 0,
             billAmount,
-            placeId: ownedPlaceId,
+            placeId: activePlaceId,
+            idempotencyKey: sessionState.idempotencyKey ?? undefined,
           })
         }}
         onDone={() => {
@@ -404,7 +530,8 @@ function ReviewModal({
   const share = billNum && couponItems.length > 0 ? Math.floor(billNum / couponItems.length) : 0
   const previewDiscounts = couponItems.map(c => {
     if (c.discountType === null || c.discountValue === null) return 0
-    if (c.discountType === 'percentage') return Math.min(share, Math.round((share * c.discountValue) / 100))
+    // Math.floor, not round — the server truncates, the preview must match
+    if (c.discountType === 'percentage') return Math.min(share, Math.floor((share * c.discountValue) / 100))
     return Math.min(share, c.discountValue)
   })
   const totalCouponDiscount = previewDiscounts.reduce((a, b) => a + b, 0)
@@ -421,17 +548,38 @@ function ReviewModal({
   // owner's history + analytics meaningful, and a uniform flow (scan →
   // review → bill → apply) beats a variant that silently skips the step.
   const showsBillInput = couponItems.length > 0 || creditItem !== undefined
+  // The server now rejects coupons applied against a 0 bill (INVALID_BILL) —
+  // mirror that guard client-side with a clear hint.
+  const billMustBePositive = couponItems.length > 0
+  const billBlocked = showsBillInput && (billNum === null || (billMustBePositive && billNum <= 0))
+  const applyDisabled = applyPending || !placeId || billBlocked
 
   const errorText = (key: string) => {
     switch (key) {
       case REDEMPTION_ERRORS.MIXED_CUSTOMERS:           return lang === 'fr' ? 'Clients mélangés' : 'Mixed customers'
-      case REDEMPTION_ERRORS.ALREADY_REDEEMED:          return lang === 'fr' ? 'Déjà utilisé'    : 'Already redeemed'
+      case REDEMPTION_ERRORS.ALREADY_REDEEMED:
+        // After a failed apply, a rescan/retry can hit ALREADY_REDEEMED even
+        // though the first attempt actually went through — point to history.
+        return lang === 'fr'
+          ? 'Déjà utilisé — la réduction a peut-être déjà été appliquée, vérifiez l\'historique'
+          : 'Already redeemed — the discount may already have been applied, check the history'
       case REDEMPTION_ERRORS.COUPON_INACTIVE_OR_EXPIRED:return lang === 'fr' ? 'Coupon inactif'  : 'Coupon inactive'
       case REDEMPTION_ERRORS.WRONG_PLACE:               return lang === 'fr' ? 'Mauvais restaurant' : 'Wrong place'
       case REDEMPTION_ERRORS.NOT_AUTHORIZED:            return lang === 'fr' ? 'Non autorisé'    : 'Not authorised'
       case REDEMPTION_ERRORS.CODE_NOT_FOUND:            return lang === 'fr' ? 'Code introuvable': 'Code not found'
-      case REDEMPTION_ERRORS.INVALID_BILL:              return lang === 'fr' ? 'Addition invalide': 'Invalid bill'
-      default: return key
+      case REDEMPTION_ERRORS.INVALID_BILL:              return lang === 'fr' ? 'Montant de l\'addition invalide' : 'Invalid bill amount'
+      case 'SELF_REDEMPTION':
+        return lang === 'fr' ? 'Vous ne pouvez pas encaisser votre propre compte' : 'You cannot redeem your own account'
+      case 'DUPLICATE_SESSION':
+        return lang === 'fr' ? 'Cette session a déjà été appliquée — vérifiez l\'historique' : 'This session was already applied — check the history'
+      case REDEMPTION_ERRORS.COUPON_SOLD_OUT:
+        return lang === 'fr' ? 'Quota du coupon épuisé' : 'Coupon quota exhausted'
+      case REDEMPTION_ERRORS.PER_USER_LIMIT_REACHED:
+        return lang === 'fr' ? 'Limite par client atteinte' : 'Per-customer limit reached'
+      default:
+        // Keep the raw key in the logs for debugging, show a generic message
+        console.log('[scanner] apply_redemption_session error:', key)
+        return lang === 'fr' ? 'Erreur — réessayez' : 'Something went wrong — try again'
     }
   }
 
@@ -535,6 +683,13 @@ function ReviewModal({
                         keyboardType="number-pad"
                         returnKeyType="done"
                       />
+                      {billMustBePositive && billNum !== null && billNum <= 0 && (
+                        <Text style={r.billHint}>
+                          {lang === 'fr'
+                            ? 'Saisissez un montant supérieur à 0 pour appliquer les coupons.'
+                            : 'Enter an amount greater than 0 to apply coupons.'}
+                        </Text>
+                      )}
                       {creditItem && billNum !== null && creditCap > 0 && (
                         <>
                           <Text style={[r.label, { marginTop: 12 }]}>
@@ -577,8 +732,9 @@ function ReviewModal({
                   )}
 
                   <Pressable
-                    disabled={applyPending || !placeId || (showsBillInput && billNum === null)}
+                    disabled={applyDisabled}
                     onPress={() => {
+                      if (applyDisabled) return
                       if (billNum === null && !showsBillInput) {
                         // No bill needed (no discount + no credit) — still apply with 0
                         void onApply(0, 0)
@@ -588,7 +744,7 @@ function ReviewModal({
                     }}
                     style={[
                       r.primaryBtn,
-                      (applyPending || !placeId || (showsBillInput && billNum === null)) && r.primaryBtnDisabled,
+                      applyDisabled && r.primaryBtnDisabled,
                     ]}
                   >
                     {applyPending
@@ -705,6 +861,31 @@ const styles = StyleSheet.create({
   },
   reviewBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
+  // Admin place picker
+  pickerList: { paddingHorizontal: 16, paddingBottom: 32, gap: 8 },
+  pickerHint: {
+    color: 'rgba(255,255,255,0.7)', fontSize: 13,
+    paddingHorizontal: 4, paddingBottom: 6,
+  },
+  pickerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 14, paddingVertical: 14,
+    borderRadius: 12,
+  },
+  pickerRowText: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '600' },
+
+  // Admin: selected place strip under the header title
+  placeStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 999,
+    marginTop: 2,
+    maxWidth: 220,
+  },
+  placeStripText: { color: '#fff', fontSize: 10, fontWeight: '600', flexShrink: 1 },
+
   permTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 4 },
   permText:  { color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 18, textAlign: 'center', maxWidth: 300 },
   permBtn:   { backgroundColor: ORANGE, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999 },
@@ -774,6 +955,7 @@ const r = StyleSheet.create({
   },
 
   errorText: { color: '#FF3B30', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 6 },
+  billHint:  { color: '#FF9500', fontSize: 12, fontWeight: '500', marginTop: 6, lineHeight: 16 },
 
   primaryBtn: {
     backgroundColor: ORANGE,

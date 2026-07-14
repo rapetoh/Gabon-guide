@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '../../../lib/supabase-server'
 import Topbar from '../../../components/admin/Topbar'
+import CouponActions from './CouponActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -200,6 +201,7 @@ export default async function AdminCouponsPage({
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Expires</th>
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Used</th>
                   <th className="text-left px-5 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-[0.08em]">Quota</th>
+                  <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -264,6 +266,9 @@ export default async function AdminCouponsPage({
                             max {c.max_redemptions_per_user}/customer
                           </div>
                         )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <CouponActions id={c.id} isActive={c.is_active} />
                       </td>
                     </tr>
                   )

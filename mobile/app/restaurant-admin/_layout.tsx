@@ -6,7 +6,7 @@ import { useSession } from '../../hooks/useSession'
 
 export default function RestaurantAdminLayout() {
   const { session, loading: sessionLoading } = useSession()
-  const { role, loading: roleLoading } = useIsAdmin()
+  const { role, isAdmin, loading: roleLoading } = useIsAdmin()
 
   if (sessionLoading || roleLoading) {
     return (
@@ -16,7 +16,10 @@ export default function RestaurantAdminLayout() {
     )
   }
 
-  if (!session || role !== 'restaurant_owner') {
+  // Owners get their dashboard; admins are also admitted (the RPC allows
+  // them to apply redemption sessions for any place, e.g. via the scanner).
+  const allowed = role === 'restaurant_owner' || role === 'admin' || isAdmin
+  if (!session || !allowed) {
     return <Redirect href="/(tabs)" />
   }
 

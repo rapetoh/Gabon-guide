@@ -13,22 +13,61 @@ import {
 } from 'react-native'
 import MapView, { Marker, Region } from 'react-native-maps'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useQuery } from '@tanstack/react-query'
 
-import { usePlaces, Place } from '../../hooks/usePlaces'
 import { supabase } from '../../lib/supabase'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { ThemeColors } from '../../constants/themes'
 
 // Libreville, Gabon — city center
 const LIBREVILLE: Region = {
-  latitude: -0.7193,
-  longitude: 8.7815,
+  latitude: 0.4162,
+  longitude: 9.4673,
   latitudeDelta: 0.12,
   longitudeDelta: 0.12,
 }
 
 function photoUrl(path: string) {
   return supabase.storage.from('place-photos').getPublicUrl(path).data.publicUrl
+}
+
+// Lightweight, unpaginated query dedicated to the map. usePlaces() pages by
+// 20 newest places, which silently truncated the pins; the map needs every
+// active place, but only the columns the pin + callout card render.
+interface MapPlace {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+  categories: { name_fr: string; name_en: string } | null
+  zones: { name: string } | null
+  photos: { storage_path: string; is_primary: boolean; is_deleted: boolean }[]
+}
+
+function useMapPlaces() {
+  return useQuery({
+    queryKey: ['map-places'],
+    queryFn: async (): Promise<MapPlace[]> => {
+      const { data, error } = await supabase
+        .from('places')
+        .select(`
+          id, name, latitude, longitude,
+          categories ( name_fr, name_en ),
+          zones ( name ),
+          photos ( storage_path, is_primary, is_deleted )
+        `)
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null)
+        .limit(500)
+      if (error) throw error
+      // Cast needed: Supabase's type inference returns `never` for nested
+      // selects with hand-written types (same caveat as usePlaces).
+      return (data ?? []) as unknown as MapPlace[]
+    },
+    staleTime: 60_000,
+  })
 }
 
 export default function MapScreen() {
@@ -39,11 +78,11 @@ export default function MapScreen() {
   const colors = useThemeColors()
   const styles = useMemo(() => createStyles(colors), [colors])
 
-  const [selected, setSelected] = useState<Place | null>(null)
+  const [selected, setSelected] = useState<MapPlace | null>(null)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
 
-  const { data } = usePlaces()
-  const places = (data?.pages.flat() ?? []) as any[]
+  const { data, isError, refetch } = useMapPlaces()
+  const places = data ?? []
   const mappable = places.filter(p => p.latitude && p.longitude)
 
   // Request location permission once
@@ -70,8 +109,8 @@ export default function MapScreen() {
     mapRef.current?.animateToRegion(LIBREVILLE, 600)
   }
 
-  const selectedPhoto = (selected as any)?.photos?.find((p: any) => p.is_primary)
-    ?? (selected as any)?.photos?.[0]
+  const selectedGallery = (selected?.photos ?? []).filter(p => !p.is_deleted)
+  const selectedPhoto = selectedGallery.find(p => p.is_primary) ?? selectedGallery[0]
 
   return (
     <View style={{ flex: 1 }}>
@@ -137,6 +176,21 @@ export default function MapScreen() {
           </Pressable>
         )}
       </View>
+
+      {/* Offline state — the map itself may still render from tile cache,
+          but without places there is nothing to pin. */}
+      {isError && mappable.length === 0 && (
+        <View style={styles.offlineCard}>
+          <Ionicons name="cloud-offline-outline" size={28} color={colors.iconMuted} />
+          <Text style={styles.offlineTitle}>{t('errors.offline')}</Text>
+          <Text style={styles.offlineHint}>{t('errors.offlineHint')}</Text>
+          <Pressable style={styles.offlineRetryBtn} onPress={() => refetch()}>
+            <Text style={styles.offlineRetryText}>
+              {lang === 'fr' ? 'Réessayer' : 'Retry'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Selected place card */}
       {selected && (
@@ -290,6 +344,47 @@ function createStyles(c: ThemeColors) {
       backgroundColor: '#4ADE80',
       borderWidth: 1.5,
       borderColor: '#fff',
+    },
+
+    // Offline state
+    offlineCard: {
+      position: 'absolute',
+      left: 32,
+      right: 32,
+      top: '38%',
+      alignItems: 'center',
+      gap: 6,
+      padding: 20,
+      borderRadius: 20,
+      backgroundColor: c.surfaceElevated,
+      borderWidth: 1,
+      borderColor: c.surfaceElevatedBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
+    },
+    offlineTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: c.textPrimary,
+    },
+    offlineHint: {
+      fontSize: 13,
+      color: c.textSecondary,
+      textAlign: 'center',
+    },
+    offlineRetryBtn: {
+      marginTop: 6,
+      paddingHorizontal: 24,
+      paddingVertical: 10,
+      borderRadius: 20,
+      backgroundColor: '#E8571A',
+    },
+    offlineRetryText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
     },
 
     // Place card

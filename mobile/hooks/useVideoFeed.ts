@@ -27,6 +27,14 @@ export interface FeedFilters {
   openNow?: boolean
 }
 
+export interface FeedPage {
+  items: FeedItem[]
+  /** Row count BEFORE the client-side openNow filter. Pagination must be
+   *  based on this — a page can be full server-side yet filter to zero
+   *  items, and ending pagination there would falsely show "no places". */
+  rawCount: number
+}
+
 const PAGE_SIZE = 15
 
 export function useVideoFeed(filters: FeedFilters = {}) {
@@ -34,7 +42,7 @@ export function useVideoFeed(filters: FeedFilters = {}) {
 
   return useInfiniteQuery({
     queryKey: ['video-feed', categoryId, zoneId, priceRange, openNow],
-    queryFn: async ({ pageParam }) => {
+    queryFn: async ({ pageParam }): Promise<FeedPage> => {
       const from = (pageParam as number) * PAGE_SIZE
       const to = from + PAGE_SIZE - 1
 
@@ -98,15 +106,19 @@ export function useVideoFeed(filters: FeedFilters = {}) {
         }
       })
 
+      const rawCount = (data ?? []).length
+
       // Open now is client-side (hours is JSON, can't filter in SQL efficiently)
       if (openNow) {
         items = items.filter(item => isOpenNow(item.hours))
       }
 
-      return items
+      return { items, rawCount }
     },
     initialPageParam: 0,
+    // Based on the pre-filter row count: a page can be full server-side yet
+    // filter down to zero items, and there may still be more rows after it.
     getNextPageParam: (lastPage, allPages) =>
-      lastPage.length > 0 ? allPages.length : undefined,
+      lastPage.rawCount === PAGE_SIZE ? allPages.length : undefined,
   })
 }

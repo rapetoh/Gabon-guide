@@ -309,7 +309,7 @@ function VideoRow({
         )}
 
         <p className="text-xs text-gray-400">
-          Uploaded {new Date(video.created_at).toLocaleDateString()}
+          Uploaded {video.created_at ? new Date(video.created_at).toLocaleDateString() : '—'}
         </p>
       </div>
 

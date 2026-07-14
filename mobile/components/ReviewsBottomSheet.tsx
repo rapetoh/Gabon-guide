@@ -206,6 +206,7 @@ export default function ReviewsBottomSheet({ placeId, placeName, visible, onClos
                     onChangeText={setReviewComment}
                     multiline
                     numberOfLines={3}
+                    maxLength={2000}
                   />
                 )}
 
@@ -263,7 +264,8 @@ export default function ReviewsBottomSheet({ placeId, placeName, visible, onClos
             ) : (
               (reviewsData?.reviews ?? []).map(review => {
                 const isOwn = review.profiles?.id === session?.user.id
-                const name = review.profiles?.full_name ?? (lang === 'fr' ? 'Utilisateur' : 'User')
+                // Fall back to the name snapshotted at account deletion, then a generic label
+                const name = review.profiles?.full_name ?? review.author_display_name ?? (lang === 'fr' ? 'Utilisateur' : 'User')
                 const initial = name.charAt(0).toUpperCase()
                 const date = new Date(review.created_at).toLocaleDateString(
                   lang === 'fr' ? 'fr-FR' : 'en-US',
@@ -302,6 +304,17 @@ export default function ReviewsBottomSheet({ placeId, placeName, visible, onClos
                     </View>
                     {review.comment ? (
                       <Text style={styles.reviewComment}>{review.comment}</Text>
+                    ) : null}
+                    {review.owner_reply ? (
+                      <View style={styles.ownerReplyBox}>
+                        <View style={styles.ownerReplyHeader}>
+                          <Ionicons name="arrow-undo" size={12} color="#E8571A" />
+                          <Text style={styles.ownerReplyLabel}>
+                            {lang === 'fr' ? 'Réponse du restaurant' : 'Reply from the restaurant'}
+                          </Text>
+                        </View>
+                        <Text style={styles.ownerReplyText}>{review.owner_reply}</Text>
+                      </View>
                     ) : null}
                   </View>
                 )
@@ -512,5 +525,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.75)',
     lineHeight: 20,
+  },
+  ownerReplyBox: {
+    marginTop: 2,
+    paddingTop: 8,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: '#E8571A',
+    gap: 4,
+  },
+  ownerReplyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ownerReplyLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#E8571A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  ownerReplyText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 18,
   },
 })

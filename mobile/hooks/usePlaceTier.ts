@@ -29,7 +29,7 @@ export function usePlaceTier(place: PlaceLike): PlaceTier {
   const { limits, loading: limLoading } = useTierLimits()
 
   return useMemo<PlaceTier>(() => {
-    const tier: SubscriptionTier = place?.subscription_tier ?? 'free'
+    const tier = (place?.subscription_tier ?? 'free') as SubscriptionTier
     const expiresAt = place?.subscription_expires_at ?? null
     const isExpired = expiresAt !== null && new Date(expiresAt).getTime() < Date.now()
     return {

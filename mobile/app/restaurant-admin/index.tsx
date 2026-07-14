@@ -189,6 +189,19 @@ export default function RestaurantAdminDashboard() {
             <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
           </Pressable>
 
+          {/* Coupon/credit scanner — open to all tiers (platform coupons and
+              welcome credit can be redeemed at any place, even Free tier) */}
+          <Pressable
+            style={[styles.actionBtn, { backgroundColor: colors.surfaceElevated }]}
+            onPress={() => router.push('/restaurant-admin/scanner' as any)}
+          >
+            <Ionicons name="scan-outline" size={22} color="#E8571A" />
+            <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
+              {lang === 'fr' ? 'Scanner un coupon' : 'Scan a coupon'}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.iconMuted} />
+          </Pressable>
+
           {/* Reviews & replies — open to all tiers */}
           <Pressable
             style={[styles.actionBtn, { backgroundColor: colors.surfaceElevated }]}

@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -16,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import {
   useAdminCoupons,
+  useAdminSetCouponActive,
   useDeletePlatformCoupon,
   type AdminCouponFilter,
   type AdminCouponRow,
@@ -59,25 +61,54 @@ export default function AdminCouponsList() {
   const [page, setPage] = useState(0)
   const { data, isLoading } = useAdminCoupons({ page, perPage: 25, search, filter })
   const deleteCoupon = useDeletePlatformCoupon()
+  const setActive = useAdminSetCouponActive()
 
   const rows = data?.rows ?? []
   const total = data?.totalCount ?? 0
   const hasMore = data?.hasMore ?? false
 
+  async function handleToggleActive(c: AdminCouponRow) {
+    try {
+      await setActive.mutateAsync({ id: c.id, isActive: !c.is_active })
+    } catch (e: any) {
+      Alert.alert(lang === 'fr' ? 'Erreur' : 'Error', e?.message ?? 'Could not update')
+    }
+  }
+
   function confirmDelete(c: AdminCouponRow) {
     Alert.alert(
       lang === 'fr' ? 'Supprimer le coupon ?' : 'Delete coupon?',
       lang === 'fr'
-        ? 'Cette action est irréversible. Les rachats déjà effectués restent enregistrés.'
-        : 'This cannot be undone. Past redemptions stay on record.',
+        ? 'Un coupon sans historique sera supprimé définitivement. Un coupon déjà réclamé ou utilisé ne peut pas être supprimé — il sera désactivé à la place.'
+        : 'A coupon with no history is permanently removed. A coupon that was already claimed or used cannot be deleted — it will be deactivated instead.',
       [
         { text: lang === 'fr' ? 'Annuler' : 'Cancel', style: 'cancel' },
         {
           text: lang === 'fr' ? 'Supprimer' : 'Delete',
           style: 'destructive',
           onPress: async () => {
-            try { await deleteCoupon.mutateAsync(c.id) }
-            catch (e: any) { Alert.alert(lang === 'fr' ? 'Erreur' : 'Error', e?.message ?? 'Could not delete') }
+            try {
+              await deleteCoupon.mutateAsync(c.id)
+            } catch (e: any) {
+              // 23503 = Postgres FK RESTRICT: redemption history exists.
+              // Deactivate instead so the coupon disappears from users
+              // while its history stays intact.
+              if (e?.code === '23503') {
+                try {
+                  await setActive.mutateAsync({ id: c.id, isActive: false })
+                  Alert.alert(
+                    lang === 'fr' ? 'Coupon désactivé' : 'Coupon deactivated',
+                    lang === 'fr'
+                      ? 'Ce coupon a un historique — il a été désactivé à la place.'
+                      : 'This coupon has history — it was deactivated instead.'
+                  )
+                } catch (e2: any) {
+                  Alert.alert(lang === 'fr' ? 'Erreur' : 'Error', e2?.message ?? 'Could not deactivate')
+                }
+              } else {
+                Alert.alert(lang === 'fr' ? 'Erreur' : 'Error', e?.message ?? 'Could not delete')
+              }
+            }
           },
         },
       ],
@@ -198,11 +229,17 @@ export default function AdminCouponsList() {
                         </Text>
                       </View>
                     </View>
-                    {isPlatform && (
+                    <View style={styles.actionsCol}>
+                      <Switch
+                        value={c.is_active}
+                        onValueChange={() => handleToggleActive(c)}
+                        trackColor={{ true: ORANGE }}
+                        style={styles.activeSwitch}
+                      />
                       <Pressable onPress={() => confirmDelete(c)} hitSlop={8} style={styles.deleteBtn}>
                         <Ionicons name="trash-outline" size={16} color="#FF3B30" />
                       </Pressable>
-                    )}
+                    </View>
                   </View>
                 )
               })}
@@ -341,6 +378,8 @@ const styles = StyleSheet.create({
   statusPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   statusText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
 
+  actionsCol: { alignItems: 'center', gap: 8 },
+  activeSwitch: { transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }] },
   deleteBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: 'rgba(255,59,48,0.08)',

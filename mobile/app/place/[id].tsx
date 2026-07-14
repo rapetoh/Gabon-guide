@@ -154,7 +154,7 @@ export default function PlaceDetailScreen() {
   const description = lang === 'fr' ? p.description_fr : p.description_en
   const category = p.categories
   const zone = p.zones
-  const openStatus = p.hours ? isOpenNow(p.hours) : null
+  const openStatus = p.hours ? isOpenNow(p.hours as unknown as import('../../lib/database.types').PlaceHours) : null
   const hasAnySocial = !!(p.social_instagram || p.social_facebook || p.social_tiktok)
 
   function handleWhatsApp() {
@@ -338,9 +338,11 @@ export default function PlaceDetailScreen() {
     analytics.ctaShareTapped(p.id, p.name)
     const description = lang === 'fr' ? p.description_fr : p.description_en
     const subtitle = description ? description.slice(0, 100) + (description.length > 100 ? '…' : '') : ''
+    const base = process.env.EXPO_PUBLIC_WEB_BASE_URL
+    const link = base ? `${base}/place/${p.id}` : `okili://place/${p.id}`
     await Share.share({
       title: p.name,
-      message: subtitle ? `${p.name} — ${subtitle}\nokili://place/${p.id}` : `${p.name}\nokili://place/${p.id}`,
+      message: subtitle ? `${p.name} — ${subtitle}\n${link}` : `${p.name}\n${link}`,
     })
   }
 
@@ -862,6 +864,7 @@ export default function PlaceDetailScreen() {
                       onChangeText={setReviewComment}
                       multiline
                       numberOfLines={3}
+                      maxLength={2000}
                     />
                     <View style={styles.reviewFormButtons}>
                       <Pressable style={styles.reviewCancelBtn} onPress={() => setReviewFormOpen(false)}>
@@ -906,7 +909,8 @@ export default function PlaceDetailScreen() {
             {/* Reviews list */}
             {(reviewsData?.reviews ?? []).map(review => {
               const isOwn = review.profiles?.id === session?.user.id
-              const name = review.profiles?.full_name ?? (lang === 'fr' ? 'Utilisateur' : 'User')
+              // Fall back to the name snapshotted at account deletion, then a generic label
+              const name = review.profiles?.full_name ?? review.author_display_name ?? (lang === 'fr' ? 'Utilisateur' : 'User')
               const initial = name.charAt(0).toUpperCase()
               const date = new Date(review.created_at).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: 'numeric' })
               return (

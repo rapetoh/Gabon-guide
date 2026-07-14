@@ -93,6 +93,8 @@ export default function ExploreScreen() {
   const {
     data,
     isLoading,
+    isError,
+    refetch,
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
@@ -361,6 +363,17 @@ export default function ExploreScreen() {
           isLoading ? (
             <View style={styles.center}>
               <ActivityIndicator color="#E8571A" size="large" />
+            </View>
+          ) : isError ? (
+            <View style={styles.center}>
+              <Ionicons name="cloud-offline-outline" size={48} color={colors.iconMuted} />
+              <Text style={styles.emptyText}>{t('errors.offline')}</Text>
+              <Text style={styles.emptyHint}>{t('errors.offlineHint')}</Text>
+              <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+                <Text style={styles.retryBtnText}>
+                  {lang === 'fr' ? 'Réessayer' : 'Retry'}
+                </Text>
+              </Pressable>
             </View>
           ) : filtered.length === 0 ? (
             <View style={styles.center}>
@@ -647,6 +660,18 @@ function createStyles(c: ThemeColors) {
     emptyHint: {
       fontSize: 14,
       color: c.textSecondary,
+    },
+    retryBtn: {
+      marginTop: 8,
+      paddingHorizontal: 24,
+      paddingVertical: 10,
+      borderRadius: 20,
+      backgroundColor: '#E8571A',
+    },
+    retryBtnText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
     },
     list: {
       paddingHorizontal: 24,

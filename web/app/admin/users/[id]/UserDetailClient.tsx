@@ -70,6 +70,13 @@ export default function UserDetailClient({
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
+  // Credit adjustment (RPC admin_adjust_credit, migration 038)
+  const [balance, setBalance] = useState<number>(stats.balanceFcfa)
+  const [creditDelta, setCreditDelta] = useState('')
+  const [creditNote, setCreditNote] = useState('')
+  const [adjusting, setAdjusting] = useState(false)
+  const [creditMessage, setCreditMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+
   const dirty =
     role !== user.role ||
     blocked !== user.is_blocked ||
@@ -127,6 +134,46 @@ export default function UserDetailClient({
     }
   }
 
+  async function handleAdjustCredit() {
+    const delta = parseInt(creditDelta, 10)
+    if (!Number.isFinite(delta) || delta === 0) {
+      setCreditMessage({ kind: 'error', text: 'Entrez un montant entier non nul (positif ou négatif).' })
+      return
+    }
+    setAdjusting(true)
+    setCreditMessage(null)
+    try {
+      // RPC not yet in the generated types — targeted cast until regeneration.
+      const rpc = supabase.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => PromiseLike<{ data: unknown; error: { message?: string } | null }>
+      const { data, error } = await rpc('admin_adjust_credit', {
+        p_user_id: user.id,
+        p_delta: delta,
+        p_note: creditNote.trim() || null,
+      })
+      if (error) {
+        const m = error.message ?? ''
+        if (m.includes('INSUFFICIENT_BALANCE')) throw new Error('Solde insuffisant pour ce retrait.')
+        if (m.includes('INVALID_DELTA')) throw new Error('Montant invalide — entier non nul requis.')
+        if (m.includes('NOT_AUTHORIZED')) throw new Error('Action réservée aux administrateurs.')
+        throw new Error(m || 'Échec de l’ajustement.')
+      }
+      const result = data as { ok: boolean; new_balance: number }
+      setBalance(result.new_balance)
+      setCreditDelta('')
+      setCreditNote('')
+      setCreditMessage({ kind: 'ok', text: `Crédit ajusté ✓ Nouveau solde : ${fmtFcfa(result.new_balance)}` })
+      router.refresh()
+    } catch (err) {
+      const text = err instanceof Error ? err.message : 'Échec de l’ajustement.'
+      setCreditMessage({ kind: 'error', text })
+    } finally {
+      setAdjusting(false)
+    }
+  }
+
   const displayName = user.full_name?.trim() || 'Sans nom'
 
   return (
@@ -161,7 +208,7 @@ export default function UserDetailClient({
         {[
           { label: 'Avis laissés', value: String(stats.reviews) },
           { label: 'Coupons utilisés', value: String(stats.redemptions) },
-          { label: 'Crédit actuel', value: fmtFcfa(stats.balanceFcfa) },
+          { label: 'Crédit actuel', value: fmtFcfa(balance) },
           { label: 'Crédit gagné (total)', value: fmtFcfa(stats.lifetimeEarned) },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4">
@@ -169,6 +216,43 @@ export default function UserDetailClient({
             <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mt-0.5">{s.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* Credit adjustment */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Ajuster le crédit</div>
+        <p className="text-xs text-gray-500">
+          Montant en FCFA — positif pour créditer, négatif pour retirer. Solde actuel : <span className="font-semibold text-gray-700">{fmtFcfa(balance)}</span>.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={creditDelta}
+            onChange={e => setCreditDelta(e.target.value.replace(/[^0-9-]/g, ''))}
+            placeholder="ex. 1000 ou -500"
+            inputMode="numeric"
+            className="w-40 rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-400"
+          />
+          <input
+            value={creditNote}
+            onChange={e => setCreditNote(e.target.value)}
+            placeholder="Note (facultatif)"
+            maxLength={200}
+            className="flex-1 min-w-[180px] rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-400"
+          />
+          <button
+            type="button"
+            onClick={handleAdjustCredit}
+            disabled={adjusting || creditDelta.trim() === ''}
+            className="rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {adjusting ? 'Ajustement…' : 'Appliquer'}
+          </button>
+        </div>
+        {creditMessage && (
+          <p className={`text-sm font-medium ${creditMessage.kind === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+            {creditMessage.text}
+          </p>
+        )}
       </div>
 
       {/* Role editor */}

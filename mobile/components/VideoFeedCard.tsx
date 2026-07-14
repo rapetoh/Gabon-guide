@@ -168,9 +168,11 @@ export default function VideoFeedCard({ item, isActive, isMuted, onToggleMute, l
       lang === 'fr'
         ? item.description_fr?.slice(0, 100)
         : item.description_en?.slice(0, 100)
+    const base = process.env.EXPO_PUBLIC_WEB_BASE_URL
+    const link = base ? `${base}/place/${item.id}` : `okili://place/${item.id}`
     Share.share({
       title: name,
-      message: desc ? `${name} — ${desc}\nokili://place/${item.id}` : `${name}\nokili://place/${item.id}`,
+      message: desc ? `${name} — ${desc}\n${link}` : `${name}\n${link}`,
     })
   }
 

@@ -90,6 +90,9 @@ export default function AccountEditScreen() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword]         = useState('')
 
+  // Google/Apple users have no password — hide the change-password section
+  const hasPassword = session?.user.app_metadata?.provider === 'email'
+
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -329,7 +332,8 @@ export default function AccountEditScreen() {
             </Text>
           </View>
 
-          {/* Password */}
+          {/* Password — only for email/password accounts */}
+          {hasPassword && (
           <View style={styles.section}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>
               {lang === 'fr' ? 'Changer le mot de passe' : 'Change password'}
@@ -367,6 +371,7 @@ export default function AccountEditScreen() {
                   </Text>}
             </Pressable>
           </View>
+          )}
 
           {/* Danger zone */}
           <View style={[styles.section, styles.dangerSection]}>

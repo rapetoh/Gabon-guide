@@ -49,7 +49,7 @@ function formatDateTime(iso: string, lang: 'fr' | 'en') {
   })
 }
 
-function discountLabel(c: Coupon, lang: 'fr' | 'en'): string | null {
+function discountLabel(c: Pick<Coupon, 'discount_type' | 'discount_value'>, lang: 'fr' | 'en'): string | null {
   if (c.discount_type === null || c.discount_value === null) return null
   if (c.discount_type === 'percentage') return `-${c.discount_value}%`
   return `-${c.discount_value.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} FCFA`
@@ -163,13 +163,23 @@ function CouponCard({ coupon, lang, onUse }: CouponCardProps) {
   )
 }
 
+// The minimal coupon shape the QR modal needs. Exported so other surfaces
+// (the profile wallet) can reuse the modal without holding a full Coupon row.
+export interface QrModalCoupon {
+  id: string
+  title_fr: string
+  title_en: string | null
+  discount_type: 'percentage' | 'amount' | null
+  discount_value: number | null
+}
+
 interface QrModalProps {
   visible: boolean
-  coupon: Coupon | null
+  coupon: QrModalCoupon | null
   onClose: () => void
 }
 
-function QrModal({ visible, coupon, onClose }: QrModalProps) {
+export function CouponQrModal({ visible, coupon, onClose }: QrModalProps) {
   const { i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const colors = useThemeColors()
@@ -328,8 +338,14 @@ function QrModal({ visible, coupon, onClose }: QrModalProps) {
                 </Text>
               </View>
             ) : (
-              <View style={styles.qrBg}>
-                <QRCode value={payload} size={220} backgroundColor="#fff" color="#000" />
+              <View style={{ alignItems: 'center', gap: 10 }}>
+                <View style={styles.qrBg}>
+                  <QRCode value={payload} size={220} backgroundColor="#fff" color="#000" />
+                </View>
+                {/* Human-readable fallback for when the scanner can't read the QR */}
+                <Text style={[styles.qrCodeText, { color: colors.textPrimary }]}>
+                  {redemption?.redemption_code}
+                </Text>
               </View>
             )}
           </View>
@@ -455,7 +471,7 @@ export default function CouponsBlock({ placeId }: { placeId: string }) {
         onUse={handleUse}
       />
 
-      <QrModal
+      <CouponQrModal
         visible={activeCoupon !== null}
         coupon={activeCoupon}
         onClose={() => setActiveCoupon(null)}
@@ -609,6 +625,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 16,
   },
+  qrCodeText: { fontSize: 16, fontWeight: '800', letterSpacing: 3 },
   qrPlaceholder: {
     width: 220, height: 220,
     alignItems: 'center',

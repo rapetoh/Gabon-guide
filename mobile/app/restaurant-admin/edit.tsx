@@ -11,9 +11,11 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -25,10 +27,35 @@ import { useSession } from '../../hooks/useSession'
 import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { supabase } from '../../lib/supabase'
-import { LockedFeatureCard } from '../../components/restaurant-admin/LockedFeatureCard'
+import { LockedFeatureCard, supportWhatsAppUrl } from '../../components/restaurant-admin/LockedFeatureCard'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const PHOTO_THUMB = (SCREEN_WIDTH - 40 - 8) / 3  // 3-column grid
+
+// ── Opening hours — exact same JSON shape as the admin PlaceForm writes
+// to places.hours: all 7 day keys always present, each day
+// { open, close, overnight, closed }.
+const DAY_KEYS = ['mon','tue','wed','thu','fri','sat','sun'] as const
+const DAY_LABELS: Record<string, { fr: string; en: string }> = {
+  mon: { fr: 'Lun', en: 'Mon' },
+  tue: { fr: 'Mar', en: 'Tue' },
+  wed: { fr: 'Mer', en: 'Wed' },
+  thu: { fr: 'Jeu', en: 'Thu' },
+  fri: { fr: 'Ven', en: 'Fri' },
+  sat: { fr: 'Sam', en: 'Sat' },
+  sun: { fr: 'Dim', en: 'Sun' },
+}
+type DayHours = { open: string; close: string; overnight: boolean; closed: boolean }
+type Hours = Record<string, DayHours>
+const DEFAULT_DAY: DayHours = { open: '09:00', close: '22:00', overnight: false, closed: false }
+
+function defaultHours(): Hours {
+  return Object.fromEntries(DAY_KEYS.map(d => [d, { ...DEFAULT_DAY }]))
+}
+
+function validateTimeFormat(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+}
 
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -50,7 +77,7 @@ export default function RestaurantAdminEdit() {
     queryFn: async () => {
       const { data } = await supabase
         .from('places')
-        .select('id, name, description_fr, description_en, address, phone, whatsapp, social_instagram, social_facebook, social_tiktok, subscription_tier, subscription_expires_at, owner_id')
+        .select('id, name, description_fr, description_en, address, phone, whatsapp, hours, social_instagram, social_facebook, social_tiktok, subscription_tier, subscription_expires_at, owner_id')
         .eq('id', id)
         .eq('owner_id', session!.user.id)
         .single()
@@ -99,6 +126,7 @@ export default function RestaurantAdminEdit() {
   const [instagram, setInstagram] = useState('')
   const [facebook, setFacebook] = useState('')
   const [tiktok, setTiktok] = useState('')
+  const [hours, setHours] = useState<Hours>(defaultHours)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [initialised, setInitialised] = useState(false)
@@ -113,7 +141,18 @@ export default function RestaurantAdminEdit() {
     setInstagram(place.social_instagram ?? '')
     setFacebook(place.social_facebook ?? '')
     setTiktok(place.social_tiktok ?? '')
+    const existingHours = (place as any).hours as Hours | null
+    if (existingHours) {
+      // Merge like the admin PlaceForm: missing day keys default to closed
+      setHours(Object.fromEntries(
+        DAY_KEYS.map(d => [d, { ...DEFAULT_DAY, ...(existingHours[d] ?? { closed: true }) }])
+      ))
+    }
     setInitialised(true)
+  }
+
+  function updateDay(day: string, field: keyof DayHours, value: string | boolean) {
+    setHours(h => ({ ...h, [day]: { ...h[day], [field]: value } }))
   }
 
   async function handleSave() {
@@ -125,14 +164,28 @@ export default function RestaurantAdminEdit() {
       )
       return
     }
+    // Validate open/close times on non-closed days (same rule as PlaceForm)
+    for (const day of DAY_KEYS) {
+      const h = hours[day]
+      if (!h.closed && (!validateTimeFormat(h.open) || !validateTimeFormat(h.close))) {
+        Alert.alert(
+          lang === 'fr' ? 'Horaires invalides' : 'Invalid hours',
+          lang === 'fr'
+            ? `${DAY_LABELS[day].fr} : utilisez le format 24h (ex. 09:00, 22:30).`
+            : `${DAY_LABELS[day].en}: use 24h format (e.g. 09:00, 22:30).`
+        )
+        return
+      }
+    }
     setSaving(true)
-    const updates: Record<string, string | null> = {
+    const updates: Record<string, string | Hours | null> = {
       name: nameFr.trim(),
       description_fr: descFr.trim() || null,
       description_en: descEn.trim() || null,
       address: address.trim() || null,
       phone: phone.trim() || null,
       whatsapp: whatsapp.trim() || null,
+      hours,
     }
     // Socials only writable when tier allows (RLS would still allow it,
     // but keep storage consistent with what the place's tier displays)
@@ -421,6 +474,78 @@ export default function RestaurantAdminEdit() {
           />
         </View>
 
+        {/* Opening hours — open to all tiers (PRD must-have) */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>
+            {lang === 'fr' ? 'Horaires' : 'Hours'}
+          </Text>
+          <Text style={[styles.hoursHint, { color: colors.textTertiary }]}>
+            {lang === 'fr'
+              ? 'Format 24h — ex: 09:00 à 22:00. Activez 🌙 si vous fermez après minuit.'
+              : '24h format — e.g. 09:00 to 22:00. Enable 🌙 if you close after midnight.'}
+          </Text>
+          <View style={{ gap: 4 }}>
+            {DAY_KEYS.map(day => {
+              const h = hours[day]
+              return (
+                <View key={day} style={styles.dayRow}>
+                  <Text style={[styles.dayName, { color: colors.textPrimary }]}>
+                    {DAY_LABELS[day][lang]}
+                  </Text>
+                  <Switch
+                    value={!h.closed}
+                    onValueChange={v => updateDay(day, 'closed', !v)}
+                    trackColor={{ true: '#34C759' }}
+                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                  />
+                  {!h.closed ? (
+                    <>
+                      <TextInput
+                        style={[styles.timeInput, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+                        value={h.open}
+                        onChangeText={v => updateDay(day, 'open', v)}
+                        placeholder="09:00"
+                        placeholderTextColor={colors.textPlaceholder}
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={5}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <Text style={[styles.timeSep, { color: colors.textSecondary }]}>–</Text>
+                      <TextInput
+                        style={[styles.timeInput, { color: colors.textPrimary, backgroundColor: colors.surfaceElevated }]}
+                        value={h.close}
+                        onChangeText={v => updateDay(day, 'close', v)}
+                        placeholder="22:00"
+                        placeholderTextColor={colors.textPlaceholder}
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={5}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <Pressable
+                        style={styles.overnightBtn}
+                        onPress={() => updateDay(day, 'overnight', !h.overnight)}
+                        hitSlop={6}
+                      >
+                        <Ionicons
+                          name={h.overnight ? 'moon' : 'moon-outline'}
+                          size={16}
+                          color={h.overnight ? '#5856D6' : '#C7C7CC'}
+                        />
+                      </Pressable>
+                    </>
+                  ) : (
+                    <Text style={[styles.closedText, { color: colors.textTertiary }]}>
+                      {lang === 'fr' ? 'Fermé' : 'Closed'}
+                    </Text>
+                  )}
+                </View>
+              )
+            })}
+          </View>
+        </View>
+
         {/* Social links — Standard+ */}
         <View style={[styles.field, { gap: 10 }]}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>
@@ -556,11 +681,21 @@ export default function RestaurantAdminEdit() {
                   ]}
                   onPress={() => {
                     if (atCap) {
+                      const waUrl = supportWhatsAppUrl()
                       Alert.alert(
                         lang === 'fr' ? 'Limite atteinte' : 'Limit reached',
                         lang === 'fr'
                           ? `Votre pack autorise ${tier.photoLimit} photo(s). Passez au pack supérieur pour en ajouter plus.`
-                          : `Your pack allows ${tier.photoLimit} photo(s). Upgrade your pack to add more.`
+                          : `Your pack allows ${tier.photoLimit} photo(s). Upgrade your pack to add more.`,
+                        waUrl
+                          ? [
+                              { text: 'OK', style: 'cancel' },
+                              {
+                                text: lang === 'fr' ? 'Contacter O\'Kili' : 'Contact O\'Kili',
+                                onPress: () => { void Linking.openURL(waUrl) },
+                              },
+                            ]
+                          : undefined
                       )
                       return
                     }
@@ -722,6 +857,45 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
+  // Opening hours editor
+  hoursHint: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  dayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 40,
+  },
+  dayName: {
+    width: 36,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  timeInput: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  timeSep: {
+    fontSize: 14,
+  },
+  overnightBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closedText: {
+    flex: 1,
+    fontSize: 13,
+  },
+
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

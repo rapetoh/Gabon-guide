@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { useQuery } from '@tanstack/react-query'
 import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import AppBackground from '../../components/AppBackground'
@@ -14,7 +15,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useFavorites } from '../../hooks/useFavorites'
-import { usePlaces } from '../../hooks/usePlaces'
 import { useSession } from '../../hooks/useSession'
 import { supabase } from '../../lib/supabase'
 import { useThemeColors } from '../../contexts/ThemeContext'
@@ -24,17 +24,51 @@ function photoUrl(path: string) {
   return supabase.storage.from('place-photos').getPublicUrl(path).data.publicUrl
 }
 
+// Shape of a favorited place row (favorites → places join)
+interface FavoritePlace {
+  id: string
+  name: string
+  categories: { name_fr: string; name_en: string } | null
+  zones: { name: string } | null
+  photos: { storage_path: string; is_primary: boolean }[] | null
+}
+
 export default function FavoritesScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const { session } = useSession()
-  const { favoriteIds, toggleFavorite } = useFavorites()
-  const { data } = usePlaces()
+  const { toggleFavorite } = useFavorites()
   const colors = useThemeColors()
   const styles = useMemo(() => createStyles(colors), [colors])
 
-  const allPlaces = data?.pages.flat() ?? []
-  const favoritePlaces = allPlaces.filter(p => favoriteIds.includes(p.id))
+  // Fetch the user's favorites joined directly to their places, so every
+  // favorite shows up — not just the ones the paginated Explore feed happens
+  // to have loaded. The ['favorites', userId, …] key means toggleFavorite's
+  // prefix invalidation refreshes this list too.
+  const { data: favoritePlaces = [], isError, refetch } = useQuery({
+    queryKey: ['favorites', session?.user.id, 'places'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('favorites')
+        .select(`
+          place_id,
+          places!inner (
+            id, name, is_deleted,
+            categories ( name_fr, name_en ),
+            zones ( name ),
+            photos ( storage_path, is_primary )
+          )
+        `)
+        .eq('user_id', session!.user.id)
+        .eq('places.is_deleted', false)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      // Cast needed: Supabase's type inference returns `never` for nested selects
+      // when using hand-written types without Relationships metadata.
+      return ((data ?? []) as unknown as { places: FavoritePlace }[]).map(f => f.places)
+    },
+    enabled: !!session,
+  })
 
   if (!session) {
     return (
@@ -60,7 +94,20 @@ export default function FavoritesScreen() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <Text style={styles.title}>{t('favorites.title')}</Text>
 
-        {favoritePlaces.length === 0 ? (
+        {isError ? (
+          <View style={styles.centered}>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="cloud-offline-outline" size={40} color="#E8571A" />
+              </View>
+              <Text style={styles.emptyBody}>{t('errors.offline')}</Text>
+              <Text style={styles.emptyHint}>{t('errors.offlineHint')}</Text>
+              <Pressable style={styles.loginBtn} onPress={() => refetch()}>
+                <Text style={styles.loginBtnText}>{lang === 'fr' ? 'Réessayer' : 'Retry'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : favoritePlaces.length === 0 ? (
           <View style={styles.centered}>
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}>

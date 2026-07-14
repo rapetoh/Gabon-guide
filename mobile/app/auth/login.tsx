@@ -199,7 +199,7 @@ export default function LoginScreen() {
         token: credential.identityToken,
       })
       if (error) throw error
-      router.replace('/(tabs)')
+      navigateAfterAuth()
     } catch (err: unknown) {
       // ERR_CANCELED means user dismissed the sheet — not an error
       if ((err as { code?: string }).code === 'ERR_CANCELED') return

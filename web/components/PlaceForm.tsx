@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../lib/supabase-browser'
-import type { Database, PlaceHours, DayHours } from '../lib/database.types'
+import type { Database, Json, PlaceHours, DayHours } from '../lib/database.types'
 
 type Place = Database['public']['Tables']['places']['Row']
 
@@ -91,7 +91,7 @@ export default function PlaceForm({ place }: Props) {
   const [categoryId, setCategoryId] = useState(place?.category_id ?? '')
   const [subcategoryId, setSubcategoryId] = useState(place?.subcategory_id ?? '')
   const [zoneId, setZoneId] = useState(place?.zone_id ?? '')
-  const [priceRange, setPriceRange] = useState<1 | 2 | 3 | null>(place?.price_range ?? null)
+  const [priceRange, setPriceRange] = useState<1 | 2 | 3 | null>((place?.price_range ?? null) as 1 | 2 | 3 | null)
   const [phone, setPhone] = useState(place?.phone ?? '')
   const [whatsapp, setWhatsapp] = useState(place?.whatsapp ?? '')
   const [website, setWebsite] = useState(place?.website ?? '')
@@ -106,7 +106,7 @@ export default function PlaceForm({ place }: Props) {
   const [promotedLabelFr, setPromotedLabelFr] = useState(place?.promoted_label_fr ?? '')
   const [promotedLabelEn, setPromotedLabelEn] = useState(place?.promoted_label_en ?? '')
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'standard' | 'premium'>(
-    place?.subscription_tier ?? 'free'
+    (place?.subscription_tier ?? 'free') as 'free' | 'standard' | 'premium'
   )
   const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState(
     place?.subscription_expires_at ? String(place.subscription_expires_at).slice(0, 10) : ''
@@ -251,7 +251,7 @@ export default function PlaceForm({ place }: Props) {
       longitude: longitude ? parseFloat(longitude) : null,
       description_fr: descriptionFr.trim() || null,
       description_en: descriptionEn.trim() || null,
-      hours,
+      hours: hours as unknown as Json,
       hours_verified_at: null,
       is_active: isActive,
       is_deleted: false,
