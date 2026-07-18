@@ -44,7 +44,12 @@ export default {
     },
     plugins: [
       'expo-router',
-      'expo-notifications',
+      // TODO (founder Apple login): restore 'expo-notifications' here, then run
+      //   cd mobile && npx eas-cli build -p ios --profile production
+      // interactively and log into Apple when asked — EAS must regenerate the
+      // provisioning profile with the Push capability (key 423ZGLXN46 is
+      // already assigned). Without the plugin the app builds and in-app
+      // notifications work (60s polling); only push banners are missing.
       'expo-apple-authentication',
       'expo-video',
       [
