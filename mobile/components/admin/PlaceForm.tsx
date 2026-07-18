@@ -439,11 +439,14 @@ export function PlaceForm({ mode, placeId }: Props) {
       newErrors.address = lang === 'fr' ? 'Maximum 300 caractères' : 'Maximum 300 characters'
     }
 
-    // TODO (pre-launch): re-enable Gabon bounding box check once development is done
-    // if (latitude !== null && longitude !== null) {
-    //   const inGabon = latitude >= -4 && latitude <= 2.5 && longitude >= 8.5 && longitude <= 14.5
-    //   if (!inGabon) newErrors.location = '...'
-    // }
+    if (latitude !== null && longitude !== null) {
+      const inGabon = latitude >= -4 && latitude <= 2.5 && longitude >= 8.5 && longitude <= 14.5
+      if (!inGabon) {
+        newErrors.location = lang === 'fr'
+          ? 'Les coordonnées doivent être au Gabon'
+          : 'Coordinates must be within Gabon'
+      }
+    }
 
     if (!categoryId) {
       newErrors.category = lang === 'fr' ? 'Sélectionnez une catégorie' : 'Select a category'

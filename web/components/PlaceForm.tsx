@@ -208,12 +208,11 @@ export default function PlaceForm({ place }: Props) {
     if (latitude && isNaN(parseFloat(latitude))) newErrors.latitude = 'Must be a number.'
     if (longitude && isNaN(parseFloat(longitude))) newErrors.longitude = 'Must be a number.'
 
-    // TODO (pre-launch): re-enable Gabon bounding box check
-    // if (latitude && longitude) {
-    //   const lat = parseFloat(latitude), lng = parseFloat(longitude)
-    //   if (lat < -4 || lat > 2.5 || lng < 8.5 || lng > 14.5)
-    //     newErrors.location = 'Coordinates must be within Gabon.'
-    // }
+    if (latitude && longitude && !isNaN(parseFloat(latitude)) && !isNaN(parseFloat(longitude))) {
+      const lat = parseFloat(latitude), lng = parseFloat(longitude)
+      if (lat < -4 || lat > 2.5 || lng < 8.5 || lng > 14.5)
+        newErrors.location = 'Coordinates must be within Gabon.'
+    }
 
     DAYS.forEach(({ key }) => {
       const h = hours[key]
@@ -490,6 +489,7 @@ export default function PlaceForm({ place }: Props) {
             {err('longitude')}
           </Field>
         </div>
+        {err('location')}
       </Section>
 
       {/* Hours */}
