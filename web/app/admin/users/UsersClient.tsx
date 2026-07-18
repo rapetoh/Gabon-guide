@@ -6,6 +6,7 @@ import Link from 'next/link'
 export interface AdminUserRow {
   id: string
   full_name: string | null
+  avatar_url: string | null
   role: 'user' | 'restaurant_owner' | 'admin'
   is_admin: boolean
   is_blocked: boolean
@@ -120,9 +121,17 @@ export default function UsersClient({ users }: { users: AdminUserRow[] }) {
                   <tr key={u.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                     <td className="px-5 py-3">
                       <Link href={`/admin/users/${u.id}`} className="flex items-center gap-3 group">
-                        <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${AVATAR_CLASSES[u.role] ?? AVATAR_CLASSES.user}`}>
-                          {displayName.charAt(0).toUpperCase()}
-                        </span>
+                        {u.avatar_url ? (
+                          <img
+                            src={u.avatar_url}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${AVATAR_CLASSES[u.role] ?? AVATAR_CLASSES.user}`}>
+                            {displayName.charAt(0).toUpperCase()}
+                          </span>
+                        )}
                         <span className="font-semibold text-gray-900 group-hover:text-orange-600">
                           {displayName}
                         </span>

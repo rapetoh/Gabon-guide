@@ -16,7 +16,7 @@ export default async function PlacesPage({
 
   let query = supabase
     .from('places')
-    .select('id, name, is_active, is_promoted, is_deleted, price_range, subscription_tier, created_at, categories(name_fr), zones(name)')
+    .select('id, name, is_active, is_promoted, is_deleted, price_range, subscription_tier, created_at, categories(name_fr), zones(name), photos(storage_path, is_primary, is_deleted, is_menu)')
     .eq('is_deleted', filter === 'deleted')
     .order('name', { ascending: true })
 
@@ -26,6 +26,14 @@ export default async function PlacesPage({
   if (tier !== 'all') query = query.eq('subscription_tier', tier as 'free' | 'standard' | 'premium')
 
   const { data: places } = await query
+
+  // Primary (or first) gallery photo per place → public thumbnail URL
+  const storageBase = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/place-photos/`
+  const thumbFor = (place: any): string | null => {
+    const gallery = (place.photos ?? []).filter((p: any) => !p.is_deleted && !p.is_menu)
+    const pick = gallery.find((p: any) => p.is_primary) ?? gallery[0]
+    return pick ? storageBase + pick.storage_path : null
+  }
 
   const filtered = ((places ?? []) as any[]).filter((p: any) =>
     q ? p.name.toLowerCase().includes(q.toLowerCase()) : true
@@ -171,11 +179,24 @@ export default async function PlacesPage({
                 {filtered.map((place: any) => (
                   <tr key={place.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900">{place.name}</span>
-                        {place.is_promoted && (
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-orange-500">● Promoted</span>
+                      <div className="flex items-center gap-3">
+                        {thumbFor(place) ? (
+                          <img
+                            src={thumbFor(place)!}
+                            alt=""
+                            className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <span className="w-9 h-9 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center text-sm font-bold flex-shrink-0">
+                            {place.name.charAt(0).toUpperCase()}
+                          </span>
                         )}
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-gray-900">{place.name}</span>
+                          {place.is_promoted && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-orange-500">● Promoted</span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-gray-500">{(place as any).categories?.name_fr ?? '—'}</td>

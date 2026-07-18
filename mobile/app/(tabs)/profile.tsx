@@ -242,9 +242,27 @@ export default function ProfileScreen() {
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.displayName} numberOfLines={1}>{displayName}</Text>
-              <Text style={styles.memberSince}>
-                {lang === 'fr' ? 'Membre O\'Kili' : 'O\'Kili member'}
-              </Text>
+              {/* Role-aware subtitle: badge only for the rare roles — a badge
+                  on every member would mean nothing. */}
+              {isAdmin || role === 'admin' ? (
+                <View style={styles.roleRow}>
+                  <Ionicons name="shield-checkmark" size={13} color="#E8571A" />
+                  <Text style={[styles.memberSince, styles.roleText]}>
+                    {lang === 'fr' ? 'Admin O\'Kili' : 'O\'Kili admin'}
+                  </Text>
+                </View>
+              ) : role === 'restaurant_owner' ? (
+                <View style={styles.roleRow}>
+                  <Ionicons name="storefront" size={13} color="#E8571A" />
+                  <Text style={[styles.memberSince, styles.roleText]}>
+                    {lang === 'fr' ? 'Restaurateur' : 'Restaurant owner'}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.memberSince}>
+                  {lang === 'fr' ? 'Membre O\'Kili' : 'O\'Kili member'}
+                </Text>
+              )}
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.iconMuted} />
           </Pressable>
@@ -747,6 +765,15 @@ function createStyles(c: ThemeColors) {
     memberSince: {
       fontSize: 13,
       color: c.textSecondary,
+    },
+    roleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    roleText: {
+      color: '#E8571A',
+      fontWeight: '600',
     },
     authCard: {
       marginHorizontal: 24,
