@@ -17,7 +17,8 @@
         "testEnvironment": "node",
         "testMatch": [
           "<rootDir>/__tests__/isOpenNow.test.ts",
-          "<rootDir>/__tests__/formatWhatsApp.test.ts"
+          "<rootDir>/__tests__/formatWhatsApp.test.ts",
+          "<rootDir>/__tests__/feedRanking.test.ts"
         ],
         "transform": {
           "^.+\\.tsx?$": [

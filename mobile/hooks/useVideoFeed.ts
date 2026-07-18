@@ -1,4 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
+import { getFeedSeed, rankFeed } from '../lib/feedRanking'
 import { supabase } from '../lib/supabase'
 import { isOpenNow } from '../utils/isOpenNow'
 
@@ -37,6 +38,9 @@ export interface FeedPage {
 
 const PAGE_SIZE = 15
 
+/** Days during which a newly added place gets a discovery boost in the feed */
+const NEW_PLACE_BOOST_DAYS = 14
+
 export function useVideoFeed(filters: FeedFilters = {}) {
   const { categoryId, zoneId, priceRange, openNow } = filters
 
@@ -46,7 +50,52 @@ export function useVideoFeed(filters: FeedFilters = {}) {
       const from = (pageParam as number) * PAGE_SIZE
       const to = from + PAGE_SIZE - 1
 
-      let query = supabase
+      // Step 1 — rank the whole catalog (lightweight query: ids + signals).
+      // Ordering happens here, not in SQL: a seeded shuffle with a quality
+      // boost, so the feed order changes between sessions/refreshes while
+      // staying stable across pages within one session.
+      let rankQuery = supabase
+        .from('places')
+        .select(`
+          id, is_promoted, created_at,
+          videos ( id ),
+          reviews ( rating )
+        `)
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .limit(500)
+
+      if (categoryId) rankQuery = rankQuery.eq('category_id', categoryId)
+      if (zoneId) rankQuery = rankQuery.eq('zone_id', zoneId)
+      if (priceRange) rankQuery = rankQuery.eq('price_range', priceRange)
+
+      const { data: pool, error: rankError } = await rankQuery
+      if (rankError) throw rankError
+
+      const nowMs = Date.now()
+      const ranked = rankFeed(
+        (pool ?? []) as any[],
+        getFeedSeed(),
+        (p: any) => {
+          const ratings: { rating: number }[] = p.reviews ?? []
+          const avgRating =
+            ratings.length > 0
+              ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+              : null
+          const ageDays = (nowMs - new Date(p.created_at).getTime()) / 86400000
+          return (
+            ((p.videos ?? []).length > 0 ? 0.25 : 0) +
+            (avgRating !== null ? (avgRating / 5) * 0.25 : 0) +
+            (ageDays <= NEW_PLACE_BOOST_DAYS ? 0.2 : 0)
+          )
+        }
+      )
+
+      const pageIds = ranked.slice(from, to + 1).map(p => p.id)
+      if (pageIds.length === 0) return { items: [], rawCount: 0 }
+
+      // Step 2 — fetch full details for just this page's places.
+      const { data, error } = await supabase
         .from('places')
         .select(`
           id, name, description_fr, description_en, is_promoted, hours, price_range,
@@ -55,22 +104,16 @@ export function useVideoFeed(filters: FeedFilters = {}) {
           photos ( storage_path, is_primary, is_menu, is_deleted ),
           videos ( id, storage_path, thumbnail_url, position )
         `)
-        .eq('is_active', true)
-        .eq('is_deleted', false)
-
-      if (categoryId) query = query.eq('category_id', categoryId)
-      if (zoneId) query = query.eq('zone_id', zoneId)
-      if (priceRange) query = query.eq('price_range', priceRange)
-
-      query = query
-        .order('is_promoted', { ascending: false })
-        .order('created_at', { ascending: false })
-        .range(from, to)
-
-      const { data, error } = await query
+        .in('id', pageIds)
       if (error) throw error
 
-      let items = (data ?? []).map((p: any): FeedItem => {
+      // .in() does not preserve order — restore the ranked order
+      const orderIndex = new Map(pageIds.map((id, i) => [id, i]))
+      const orderedData = [...(data ?? [])].sort(
+        (a: any, b: any) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0)
+      )
+
+      let items = orderedData.map((p: any): FeedItem => {
         const allPhotos: any[] = p.photos ?? []
         const gallery = allPhotos
           .filter((ph: any) => !ph.is_deleted && !ph.is_menu)
@@ -106,7 +149,7 @@ export function useVideoFeed(filters: FeedFilters = {}) {
         }
       })
 
-      const rawCount = (data ?? []).length
+      const rawCount = pageIds.length
 
       // Open now is client-side (hours is JSON, can't filter in SQL efficiently)
       if (openNow) {

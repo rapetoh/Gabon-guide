@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { getFeedSeed, rankFeed } from '../lib/feedRanking'
 import { supabase } from '../lib/supabase'
 
 export interface TrendingPlace {
@@ -19,10 +20,10 @@ export interface TrendingPlace {
 /**
  * Fetches places for the "Trending Now" home screen section.
  *
- * Sort order:
- *   1. Promoted places (is_promoted = true) — appear first, carry a badge
- *   2. Top-rated places (highest average review rating)
- *   3. Remaining active places (fallback when reviews are scarce)
+ * Ranking: average rating drives the score, with a seeded jitter so the
+ * section doesn't show the identical list on every open. Promoted places
+ * get a rotating slot within the top 3 (guaranteed early, never welded
+ * to #1) and carry a badge.
  *
  * Returns up to 8 places total.
  */
@@ -60,18 +61,19 @@ export function useTrendingPlaces() {
         } as TrendingPlace
       })
 
-      // Sort: promoted first, then by average rating descending, then by review count
-      ranked.sort((a, b) => {
-        if (a.is_promoted && !b.is_promoted) return -1
-        if (!a.is_promoted && b.is_promoted) return 1
-        // Both in the same tier — sort by rating
-        if (a._avgRating !== null && b._avgRating !== null) return b._avgRating - a._avgRating
-        if (a._avgRating !== null) return -1
-        if (b._avgRating !== null) return 1
-        return b._reviewCount - a._reviewCount
-      })
+      // Rating dominates the score; the seeded jitter (noiseWeight 0.4)
+      // varies the order between sessions without letting a 3-star place
+      // outrank a 5-star one. rankFeed slots promoted places into the top 3.
+      const shuffled = rankFeed(
+        ranked,
+        getFeedSeed(),
+        p =>
+          (p._avgRating !== null ? (p._avgRating / 5) * 1.0 : 0.3) +
+          Math.min(p._reviewCount, 10) * 0.01,
+        0.4
+      )
 
-      return ranked.slice(0, 8)
+      return shuffled.slice(0, 8)
     },
     staleTime: 5 * 60 * 1000, // 5 minutes — trending doesn't change by the second
   })
