@@ -2053,3 +2053,6 @@ Founder call, agent owns execution: **(a) SHIPPED — premium coupon broadcast**
 4. Log in as the owner test account once to eyeball the "Last 7 days" card.
 5. Review `docs/STORE_LISTING.md` wording (2 ⚠ items: age rating answer, support URL).
 6. Still deferred (unchanged): payments, owner claim flow, tier-expiry cron, help screen, admin FR, email-confirmation toggle + SMTP, leaked-password protection.
+
+### Refresh overhaul + final builds (2026-07-18 evening)
+Founder hit stale owner-metrics on TestFlight (fix existed but hadn't shipped — lesson: daily-felt fixes ARE "major", ship them). **Build #21**: refetchOnMount:'always' + AppState-wired refetchOnWindowFocus (freshness policy c7d5002) + pull-to-refresh on owner dashboard/place/profile/inbox. **Build #22**: pull-to-refresh on ALL 11 scrolling data screens (home feed, explore, favorites, owner coupons/reviews/history, activity + the previous four; exceptions: map, admin tooling). Also in #20–22: Estuaire circle app icon (founder's pick), credit card above preferences, social row centered + light-mode chips, profile navbar clearance. Freshness policy verified live on simulator (server-side rename appeared on re-navigation without app restart). Testers should use build #22+.
