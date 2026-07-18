@@ -25,6 +25,7 @@ import MapView, { Marker, Polyline } from 'react-native-maps'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { usePlace } from '../../hooks/usePlace'
+import { logPlaceEvent } from '../../hooks/usePlaceMetrics'
 import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useFavorites } from '../../hooks/useFavorites'
 import { useReviews, useUserReview, useSubmitReview, useDeleteReview } from '../../hooks/useReviews'
@@ -106,6 +107,7 @@ export default function PlaceDetailScreen() {
   useEffect(() => {
     if (place) {
       analytics.placeViewed(place.id, place.name, (place as any).categories?.name_en)
+      logPlaceEvent(place.id, 'view')
     }
   }, [place?.id])
 
@@ -161,6 +163,7 @@ export default function PlaceDetailScreen() {
     const url = getWhatsAppUrl(p.whatsapp)
     if (url) {
       analytics.ctaWhatsappTapped(p.id, p.name)
+      logPlaceEvent(p.id, 'whatsapp')
       Linking.openURL(url)
     }
   }
@@ -168,6 +171,7 @@ export default function PlaceDetailScreen() {
   function handleCall() {
     if (!p.phone) return
     analytics.ctaCallTapped(p.id, p.name)
+    logPlaceEvent(p.id, 'call')
     Linking.openURL(`tel:${formatPhone(p.phone)}`)
   }
 

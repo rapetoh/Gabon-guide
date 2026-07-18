@@ -369,6 +369,38 @@ export type Database = {
           },
         ]
       }
+      place_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: number
+          place_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: never
+          place_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: never
+          place_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "place_events_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       places: {
         Row: {
           address: string | null
@@ -966,6 +998,15 @@ export type Database = {
           balance_fcfa: number
           email: string
           full_name: string
+        }[]
+      }
+      get_place_metrics: {
+        Args: { p_place_id: string }
+        Returns: {
+          calls: number
+          day: string
+          views: number
+          whatsapp_taps: number
         }[]
       }
       grant_referral_reward: { Args: { p_user_id: string }; Returns: undefined }

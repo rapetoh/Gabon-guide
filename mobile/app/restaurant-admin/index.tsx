@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 
 import { useSession } from '../../hooks/useSession'
+import { usePlaceMetrics } from '../../hooks/usePlaceMetrics'
 import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { supabase } from '../../lib/supabase'
@@ -65,6 +66,16 @@ export default function RestaurantAdminDashboard() {
   const { session } = useSession()
   const { data: place, isLoading } = useOwnedPlace(session?.user.id)
   const tier = usePlaceTier(place)
+  const { data: metrics } = usePlaceMetrics(place?.id)
+
+  const totals = (metrics ?? []).reduce(
+    (acc, d) => ({
+      views: acc.views + d.views,
+      whatsapp: acc.whatsapp + d.whatsapp_taps,
+      calls: acc.calls + d.calls,
+    }),
+    { views: 0, whatsapp: 0, calls: 0 },
+  )
 
   const primaryPhoto = place?.photos
     ?.filter(p => !p.is_deleted && !p.is_menu)
@@ -170,6 +181,34 @@ export default function RestaurantAdminDashboard() {
             {expiresHint && (
               <Text style={[styles.tierHint, { color: tierStyle.fg }]}>{expiresHint}</Text>
             )}
+          </View>
+        </View>
+
+        {/* Last-7-days engagement (migration 041) */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+            {lang === 'fr' ? '7 derniers jours' : 'Last 7 days'}
+          </Text>
+          <View style={styles.metricsRow}>
+            <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
+              <Ionicons name="eye-outline" size={18} color="#0A84FF" />
+              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.views : '—'}</Text>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                {lang === 'fr' ? 'Vues' : 'Views'}
+              </Text>
+            </View>
+            <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
+              <Ionicons name="logo-whatsapp" size={18} color="#34C759" />
+              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.whatsapp : '—'}</Text>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>WhatsApp</Text>
+            </View>
+            <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
+              <Ionicons name="call-outline" size={18} color="#E8571A" />
+              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.calls : '—'}</Text>
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                {lang === 'fr' ? 'Appels' : 'Calls'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -363,6 +402,19 @@ const styles = StyleSheet.create({
   tierHint:  { fontSize: 11, fontWeight: '500', marginTop: 2, opacity: 0.85 },
 
   section: { gap: 8 },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  metricCard: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  metricValue: { fontSize: 20, fontWeight: '800' },
+  metricLabel: { fontSize: 11, fontWeight: '600' },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
