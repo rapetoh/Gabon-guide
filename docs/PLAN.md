@@ -2011,3 +2011,35 @@ The founder holds this agent 100% accountable for the project's success and will
 - Supabase project `fvmzsxmlpwvtnszmuowc` via MCP tools (execute_sql / apply_migration / advisors / logs).
 
 Everything is in git + these docs. Founder types passwords when prompted and tests on devices; the agent does everything else and verifies by driving the app, not by assuming.
+
+---
+
+## 2026-07-18 — Session record: mandate execution (items 1–10)
+
+All work is on `dev`, commits 113f903..c57c0bc+. Verified means "SQL sim with rollback and/or driven on the simulator", not "code written".
+
+### Shipped
+1. **Types regen** — `get_all_users_for_admin.avatar_url` was indeed missing (handoff's suspicion); fixed in both apps.
+2. **TestFlight build #9** (v1.0.0) built + submitted non-interactively. NOTE: EAS remote buildNumber ran 9→13 this session (failed attempts increment too); "build #6" in the mandate = build #9 at Apple.
+3. **Web admin deployed**: https://okili-admin.vercel.app (Vercel project `okili-admin`, account `rapetoh`; NEXT_PUBLIC_SUPABASE_URL/ANON_KEY set for production+preview). Email/password login works now; **Google OAuth needs the founder to add `https://okili-admin.vercel.app/auth/callback` to Supabase Auth → URL Configuration → Redirect URLs** (no CLI/API path without a personal access token — CLI login is impossible from this harness, see memory).
+4. **In-app notifications end-to-end** (migrations 039, 040): `notifications` table, RLS own-select + read_at-only update (column grants), SECURITY DEFINER triggers on coupon-redeemed / credit_transactions / review-reply. Client: bell + unread badge on home header, `/notifications` inbox, FR/EN rendered client-side from payload. **Driven on simulator: badge 1 → inbox shows row → mark-read lands in DB → badge clears.**
+5. **Push, one system with in-app**: `push_tokens`, `profiles.preferred_language` (synced by app), `pushed_at` dedup; pg_net AFTER INSERT trigger → `send_push` Edge Function (deployed; Expo Push API; FR/EN server-rendered; dead-token pruning). **Server pipeline verified live** (insert → pushed_at stamped). Device delivery needs the push-capable build (below) + a real device.
+6. **Owner metrics end-to-end** (041, 043): insert-only `place_events` (view/whatsapp/call), `get_place_metrics` RPC (owner/admin-gated, zero-filled 7 days, anon revoked), app logs events (real tap on simulator produced a row), "Last 7 days" cards on restaurant-admin home. Card UI still needs an eyeball with an owner login (no owned place on the simulator's account).
+7. **Server guards** (042, all SQL-sim verified): publish requires ≥1 gallery photo (everyone); tier photo cap; coupons/videos tier-feature gates (admin bypass on commercial rules only). **Gabon bounds re-enabled in both PlaceForms** (test-place creation from abroad now needs a pasted Libreville link).
+8. **Privacy policy live**: https://okili-admin.vercel.app/privacy (bilingual). **Store listing draft**: `docs/STORE_LISTING.md`.
+9. **Sentry wired, dormant**: mobile `lib/sentry.ts` (native-module probe + `EXPO_PUBLIC_SENTRY_DSN` gate), web instrumentation files (`NEXT_PUBLIC_SENTRY_DSN` gate). Founder creates the Sentry org; then set both DSNs (EAS env + Vercel env) and rebuild/redeploy.
+10. **Bug fixes**: onboarding preferences now sync to profile on first login (`useOnboardingPrefsSync` — onboarding runs pre-signup, that was the real 6.3 gap). i18n persistence was already fixed by the parallel session (6d12756).
+
+### Push-capable build (the hard-won part)
+- expo-notifications added; **first build failed**: stored provisioning profile lacked Push capability; `--non-interactive` can't regenerate it.
+- **Fix that worked**: run `eas build` under a pty (expect), answer **No** to "log in to Apple account", then accept defaults — EAS reused the founder's existing Apple Push Key **423ZGLXN46** (stored on Expo servers from his other apps) and assigned it to com.okili.app. No Apple password needed.
+- Build c8b6d15a (buildNumber 13) started with push entitlements; submit follows on success.
+- **expo-device is BANNED from this repo**: PostHog eagerly requires it if present in node_modules → crashes every binary built before it existed. Same class of bug: probe `requireOptionalNativeModule()` before importing any newly-added native package (see `usePushRegistration`, `lib/sentry.ts`).
+
+### Founder checklist (in his lane: clicks + credentials + devices)
+1. Supabase dashboard → Auth → URL Configuration → add `https://okili-admin.vercel.app/auth/callback` to Redirect URLs.
+2. Create Sentry account + 2 projects (React Native, Next.js), paste both DSNs in chat.
+3. When build 13 hits TestFlight: update on Senyo iPhone, accept the push permission prompt, then have the agent fire a test notification → verify banner arrives + inbox works on hardware.
+4. Log in as the owner test account once to eyeball the "Last 7 days" card.
+5. Review `docs/STORE_LISTING.md` wording (2 ⚠ items: age rating answer, support URL).
+6. Still deferred (unchanged): payments, owner claim flow, tier-expiry cron, help screen, admin FR, email-confirmation toggle + SMTP, leaked-password protection.
