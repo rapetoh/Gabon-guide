@@ -15,6 +15,7 @@ import {
   Text,
   TextInput,
   View,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
@@ -29,6 +30,7 @@ import { isOpenNow } from '../../utils/isOpenNow'
 import { getDistanceKm, NEARBY_RADIUS_KM } from '../../utils/distance'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { ThemeColors } from '../../constants/themes'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const { width } = Dimensions.get('window')
 const TRENDING_CARD_WIDTH = 200
@@ -51,6 +53,7 @@ const CATEGORIES_DISPLAY = [
 
 export default function ExploreScreen() {
   const { t, i18n } = useTranslation()
+  const { refreshing, onRefresh } = usePullRefresh()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const colors = useThemeColors()
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -247,7 +250,8 @@ export default function ExploreScreen() {
 
         {/* ── Discovery mode — shown when no search/filters active ── */}
         {isDiscoveryMode ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}>
 
             {/* Trending Now */}
             <View style={styles.sectionRow}>
@@ -383,6 +387,7 @@ export default function ExploreScreen() {
             </View>
           ) : (
             <FlatList
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}
               data={filtered}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.list}

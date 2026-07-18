@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -19,6 +20,7 @@ import { useSession } from '../../hooks/useSession'
 import { supabase } from '../../lib/supabase'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { ThemeColors } from '../../constants/themes'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 function photoUrl(path: string) {
   return supabase.storage.from('place-photos').getPublicUrl(path).data.publicUrl
@@ -35,6 +37,7 @@ interface FavoritePlace {
 
 export default function FavoritesScreen() {
   const { t, i18n } = useTranslation()
+  const { refreshing, onRefresh } = usePullRefresh()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const { session } = useSession()
   const { toggleFavorite } = useFavorites()
@@ -119,6 +122,7 @@ export default function FavoritesScreen() {
           </View>
         ) : (
           <FlatList
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}
             data={favoritePlaces}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.list}

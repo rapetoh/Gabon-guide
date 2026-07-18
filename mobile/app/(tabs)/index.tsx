@@ -15,6 +15,7 @@ import {
   Text,
   View,
   ViewToken,
+  RefreshControl,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -23,12 +24,14 @@ import { useVideoFeed, FeedFilters } from '../../hooks/useVideoFeed'
 import { useCategories } from '../../hooks/useCategories'
 import { useUnreadNotificationCount } from '../../hooks/useNotifications'
 import { useZones } from '../../hooks/useZones'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 // Price range labels
 const PRICE_LABELS: Record<number, string> = { 1: '$', 2: '$$', 3: '$$$' }
 
 export default function HomeScreen() {
   const { t, i18n } = useTranslation()
+  const { refreshing, onRefresh } = usePullRefresh()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const insets = useSafeAreaInsets()
   const { data: unread } = useUnreadNotificationCount()
@@ -154,6 +157,7 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
           ref={feedRef}
           data={feedItems}
           keyExtractor={item => item.id}

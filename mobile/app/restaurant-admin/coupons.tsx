@@ -14,6 +14,7 @@ import {
   Text,
   TextInput,
   View,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -32,6 +33,7 @@ import { useCouponUsage } from '../../hooks/useCouponRedemption'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { LockedFeatureCard } from '../../components/restaurant-admin/LockedFeatureCard'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 interface OwnedPlaceLite {
   id: string
@@ -124,6 +126,7 @@ function CouponInfoRow({ coupon, lang }: { coupon: Coupon; lang: 'fr' | 'en' }) 
 
 export default function RestaurantAdminCoupons() {
   const { i18n } = useTranslation()
+  const { refreshing, onRefresh } = usePullRefresh()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const colors = useThemeColors()
   const { session } = useSession()
@@ -278,7 +281,8 @@ export default function RestaurantAdminCoupons() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
       >
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}>
           {/* Locked feature for Free */}
           {!placeLoading && place && !canCreate && (
             <LockedFeatureCard

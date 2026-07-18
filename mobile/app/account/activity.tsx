@@ -9,12 +9,14 @@ import {
   StyleSheet,
   Text,
   View,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { useUserActivity, type UserActivityItem } from '../../hooks/useActivity'
 import { useCreditBalance } from '../../hooks/useCredit'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 function formatFcfa(n: number, lang: 'fr' | 'en'): string {
   return `${n.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} FCFA`
@@ -89,6 +91,7 @@ function eventCopy(item: UserActivityItem, lang: 'fr' | 'en'): { title: string; 
 
 export default function ActivityScreen() {
   const { i18n } = useTranslation()
+  const { refreshing, onRefresh } = usePullRefresh()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const colors = useThemeColors()
   const { data: items, isLoading } = useUserActivity(50)
@@ -125,7 +128,8 @@ export default function ActivityScreen() {
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}>
         {isLoading ? (
           <View style={styles.loading}><ActivityIndicator color="#E8571A" /></View>
         ) : (items ?? []).length === 0 ? (

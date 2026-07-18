@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
   View,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
@@ -21,6 +22,7 @@ import { supabase } from '../../lib/supabase'
 import { useSession } from '../../hooks/useSession'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { useReviews, useSetOwnerReply, type ReviewWithProfile } from '../../hooks/useReviews'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 interface OwnedPlaceLite {
   id: string
@@ -238,6 +240,7 @@ function ReviewCard({ review, placeId, lang }: ReviewCardProps) {
 
 export default function RestaurantAdminReviews() {
   const { i18n } = useTranslation()
+  const { refreshing, onRefresh } = usePullRefresh()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const colors = useThemeColors()
   const { session } = useSession()
@@ -264,6 +267,7 @@ export default function RestaurantAdminReviews() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
       >
         <ScrollView
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}

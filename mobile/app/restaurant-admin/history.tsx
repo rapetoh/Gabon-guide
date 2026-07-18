@@ -9,11 +9,13 @@ import {
   StyleSheet,
   Text,
   View,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useOwnedPlaceId } from '../../hooks/useCoupons'
 import { useOwnerActivity, type OwnerActivityItem } from '../../hooks/useActivity'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const ORANGE = '#E8571A'
 
@@ -44,6 +46,7 @@ function withinFilter(iso: string, filter: FilterKey): boolean {
 
 export default function OwnerHistoryScreen() {
   const { i18n } = useTranslation()
+  const { refreshing, onRefresh } = usePullRefresh()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const { data: placeId } = useOwnedPlaceId()
   const { data: items, isLoading } = useOwnerActivity(placeId ?? undefined, 100)
@@ -123,7 +126,8 @@ export default function OwnerHistoryScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}>
         {isLoading ? (
           <View style={styles.loading}><ActivityIndicator color={ORANGE} /></View>
         ) : filtered.length === 0 ? (
