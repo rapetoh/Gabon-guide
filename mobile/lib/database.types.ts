@@ -283,6 +283,51 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          payload: Json
+          pushed_at: string | null
+          read_at: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          pushed_at?: string | null
+          read_at?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          pushed_at?: string | null
+          read_at?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       photos: {
         Row: {
           created_at: string | null
@@ -468,6 +513,7 @@ export type Database = {
           id: string
           is_admin: boolean | null
           is_blocked: boolean
+          preferred_language: string
           preferred_vibes: string[]
           preferred_zones: string[]
           referral_code: string | null
@@ -482,6 +528,7 @@ export type Database = {
           id: string
           is_admin?: boolean | null
           is_blocked?: boolean
+          preferred_language?: string
           preferred_vibes?: string[]
           preferred_zones?: string[]
           referral_code?: string | null
@@ -496,6 +543,7 @@ export type Database = {
           id?: string
           is_admin?: boolean | null
           is_blocked?: boolean
+          preferred_language?: string
           preferred_vibes?: string[]
           preferred_zones?: string[]
           referral_code?: string | null
@@ -513,6 +561,42 @@ export type Database = {
           {
             foreignKeyName: "profiles_referred_by_fkey"
             columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          platform: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          platform?: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          platform?: string
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_tokens_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles_public"
             referencedColumns: ["id"]

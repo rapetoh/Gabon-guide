@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import VideoFeedCard, { CARD_HEIGHT } from '../../components/VideoFeedCard'
 import { useVideoFeed, FeedFilters } from '../../hooks/useVideoFeed'
 import { useCategories } from '../../hooks/useCategories'
+import { useUnreadNotificationCount } from '../../hooks/useNotifications'
 import { useZones } from '../../hooks/useZones'
 
 // Price range labels
@@ -30,6 +31,8 @@ export default function HomeScreen() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const insets = useSafeAreaInsets()
+  const { data: unread } = useUnreadNotificationCount()
+  const unreadCount = unread ?? 0
 
   // ── Filters ─────────────────────────────────────────────────────────────────
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
@@ -227,6 +230,20 @@ export default function HomeScreen() {
           >
             <Ionicons name="search" size={22} color="#fff" style={styles.searchIconShadow} />
           </Pressable>
+
+          {/* Notifications bell + unread badge */}
+          <Pressable
+            style={styles.bellIconBtn}
+            onPress={() => router.push('/notifications' as any)}
+            hitSlop={10}
+          >
+            <Ionicons name="notifications-outline" size={22} color="#fff" style={styles.searchIconShadow} />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         {/* Row 2: Quick-filter chips */}
@@ -373,6 +390,27 @@ const styles = StyleSheet.create({
   searchIconBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
+  },
+  bellIconBtn: {
+    paddingRight: 14,
+    paddingVertical: 8,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: '#E8571A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#fff',
   },
   searchIconShadow: {
     textShadowColor: 'rgba(0,0,0,0.8)',

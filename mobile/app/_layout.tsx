@@ -10,8 +10,16 @@ import { useEffect, useState } from 'react'
 import { ActivityIndicator, View } from 'react-native'
 
 import { supabase } from '../lib/supabase'
+import { usePushRegistration } from '../hooks/usePushRegistration'
 
 export const ONBOARDING_KEY = 'onboarding_completed'
+
+// Push registration + language sync need a mounted component inside the
+// provider tree; the hook itself waits for a session before doing anything.
+function PushSetup() {
+  usePushRegistration()
+  return null
+}
 
 function ThemedStatusBar() {
   const { theme } = useTheme()
@@ -69,9 +77,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <ThemedStatusBar />
+          <PushSetup />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="onboarding" />
+            <Stack.Screen name="notifications" options={{ presentation: 'card' }} />
             <Stack.Screen name="place/[id]" options={{ presentation: 'card' }} />
             <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
             <Stack.Screen name="admin" />
