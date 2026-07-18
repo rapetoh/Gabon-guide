@@ -311,84 +311,6 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Settings */}
-        <View style={styles.settingsSection}>
-          <Text style={styles.settingsHeader}>
-            {lang === 'fr' ? 'Préférences' : 'Preferences'}
-          </Text>
-
-          {/* Language toggle */}
-          <View style={styles.row}>
-            <View style={[styles.rowIcon, { backgroundColor: 'rgba(0,122,255,0.1)' }]}>
-              <Ionicons name="globe-outline" size={18} color="#007AFF" />
-            </View>
-            <Text style={styles.rowLabel}>{t('settings.language')}</Text>
-            <View style={styles.segmentWrap}>
-              <Pressable
-                style={[styles.seg, lang === 'fr' && styles.segActive]}
-                onPress={() => i18n.changeLanguage('fr')}
-              >
-                <Text style={[styles.segText, lang === 'fr' && styles.segTextActive]}>FR</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.seg, lang === 'en' && styles.segActive]}
-                onPress={() => i18n.changeLanguage('en')}
-              >
-                <Text style={[styles.segText, lang === 'en' && styles.segTextActive]}>EN</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Appearance — 3-way theme selector */}
-          <View style={styles.row}>
-            <View style={[styles.rowIcon, { backgroundColor: 'rgba(175,82,222,0.1)' }]}>
-              <Ionicons name="color-palette-outline" size={18} color="#AF52DE" />
-            </View>
-            <View style={{ flex: 1, gap: 8 }}>
-              <Text style={styles.rowLabel}>
-                {lang === 'fr' ? 'Apparence' : 'Appearance'}
-              </Text>
-              <View style={styles.themeSegWrap}>
-                {THEME_OPTIONS.map(opt => (
-                  <Pressable
-                    key={opt.key}
-                    style={[styles.themeSeg, theme === opt.key && styles.themeSegActive]}
-                    onPress={() => setTheme(opt.key)}
-                  >
-                    <Text style={[styles.themeSegText, theme === opt.key && styles.themeSegTextActive]}>
-                      {lang === 'fr' ? opt.labelFr : opt.labelEn}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          </View>
-
-          {/* Proximity deal alerts — opt-in, needs "Always" location */}
-          {session && (
-            <View style={styles.row}>
-              <View style={[styles.rowIcon, { backgroundColor: 'rgba(52,199,89,0.1)' }]}>
-                <Ionicons name="location-outline" size={18} color="#34C759" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>
-                  {lang === 'fr' ? 'Bons plans à proximité' : 'Nearby deal alerts'}
-                </Text>
-                <Text style={styles.rowHint}>
-                  {lang === 'fr'
-                    ? 'Une alerte (max 1/jour) quand vous passez près d’un coupon en cours'
-                    : 'One alert (max 1/day) when you walk by a live coupon'}
-                </Text>
-              </View>
-              <Switch
-                value={proximityOn}
-                onValueChange={handleProximityToggle}
-                trackColor={{ true: '#34C759' }}
-              />
-            </View>
-          )}
-        </View>
-
         {/* Welcome credit + referral combined card.
             Surfaced whenever the user is signed in and either has credit
             or a referral code to share. */}
@@ -467,6 +389,84 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
         )}
+
+        {/* Settings */}
+        <View style={styles.settingsSection}>
+          <Text style={styles.settingsHeader}>
+            {lang === 'fr' ? 'Préférences' : 'Preferences'}
+          </Text>
+
+          {/* Language toggle */}
+          <View style={styles.row}>
+            <View style={[styles.rowIcon, { backgroundColor: 'rgba(0,122,255,0.1)' }]}>
+              <Ionicons name="globe-outline" size={18} color="#007AFF" />
+            </View>
+            <Text style={styles.rowLabel}>{t('settings.language')}</Text>
+            <View style={styles.segmentWrap}>
+              <Pressable
+                style={[styles.seg, lang === 'fr' && styles.segActive]}
+                onPress={() => i18n.changeLanguage('fr')}
+              >
+                <Text style={[styles.segText, lang === 'fr' && styles.segTextActive]}>FR</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.seg, lang === 'en' && styles.segActive]}
+                onPress={() => i18n.changeLanguage('en')}
+              >
+                <Text style={[styles.segText, lang === 'en' && styles.segTextActive]}>EN</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Appearance — 3-way theme selector */}
+          <View style={styles.row}>
+            <View style={[styles.rowIcon, { backgroundColor: 'rgba(175,82,222,0.1)' }]}>
+              <Ionicons name="color-palette-outline" size={18} color="#AF52DE" />
+            </View>
+            <View style={{ flex: 1, gap: 8 }}>
+              <Text style={styles.rowLabel}>
+                {lang === 'fr' ? 'Apparence' : 'Appearance'}
+              </Text>
+              <View style={styles.themeSegWrap}>
+                {THEME_OPTIONS.map(opt => (
+                  <Pressable
+                    key={opt.key}
+                    style={[styles.themeSeg, theme === opt.key && styles.themeSegActive]}
+                    onPress={() => setTheme(opt.key)}
+                  >
+                    <Text style={[styles.themeSegText, theme === opt.key && styles.themeSegTextActive]}>
+                      {lang === 'fr' ? opt.labelFr : opt.labelEn}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          {/* Proximity deal alerts — opt-in, needs "Always" location */}
+          {session && (
+            <View style={styles.row}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(52,199,89,0.1)' }]}>
+                <Ionicons name="location-outline" size={18} color="#34C759" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowLabel}>
+                  {lang === 'fr' ? 'Bons plans à proximité' : 'Nearby deal alerts'}
+                </Text>
+                <Text style={styles.rowHint}>
+                  {lang === 'fr'
+                    ? 'Une alerte (max 1/jour) quand vous passez près d’un coupon en cours'
+                    : 'One alert (max 1/day) when you walk by a live coupon'}
+                </Text>
+              </View>
+              <Switch
+                value={proximityOn}
+                onValueChange={handleProximityToggle}
+                trackColor={{ true: '#34C759' }}
+              />
+            </View>
+          )}
+        </View>
 
         {/* My coupons — every unredeemed coupon the user holds. Closes the
             discoverability gap for coupons earned without visiting the place. */}
