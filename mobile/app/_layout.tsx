@@ -1,5 +1,8 @@
 import '../lib/i18n' // Initialize i18n before anything renders
 
+import { initSentry } from '../lib/sentry'
+initSentry() // async + env-gated; no-op without EXPO_PUBLIC_SENTRY_DSN
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext'
 import { PostHogProvider } from 'posthog-react-native'
@@ -10,14 +13,17 @@ import { useEffect, useState } from 'react'
 import { ActivityIndicator, View } from 'react-native'
 
 import { supabase } from '../lib/supabase'
+import { useOnboardingPrefsSync } from '../hooks/useOnboardingPrefsSync'
 import { usePushRegistration } from '../hooks/usePushRegistration'
 
 export const ONBOARDING_KEY = 'onboarding_completed'
 
-// Push registration + language sync need a mounted component inside the
-// provider tree; the hook itself waits for a session before doing anything.
-function PushSetup() {
+// Session-driven side effects (push registration, language sync, onboarding
+// preference upload) need a mounted component inside the provider tree; the
+// hooks wait for a session before doing anything.
+function SessionSideEffects() {
   usePushRegistration()
+  useOnboardingPrefsSync()
   return null
 }
 
@@ -77,7 +83,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <ThemedStatusBar />
-          <PushSetup />
+          <SessionSideEffects />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="onboarding" />
