@@ -72,6 +72,17 @@ function renderPush(type: string, p: any, lang: Lang): { title: string; body: st
         ? { title: `${place} : nouveau coupon 🏷️`, body: title ?? 'Une nouvelle offre vous attend.' }
         : { title: `${place}: new coupon 🏷️`, body: title ?? 'A new offer is waiting for you.' }
     }
+    case 'tier_expiry': {
+      const days = p?.days_left ?? 0
+      if (p?.milestone === 'expired') {
+        return lang === 'fr'
+          ? { title: 'Abonnement expiré ⚠️', body: `${place} (${p?.tier}) — l'abonnement est arrivé à échéance. Pensez à encaisser le renouvellement.` }
+          : { title: 'Subscription expired ⚠️', body: `${place} (${p?.tier}) — the subscription has lapsed. Time to collect the renewal.` }
+      }
+      return lang === 'fr'
+        ? { title: 'Renouvellement à prévoir ⏳', body: `${place} (${p?.tier}) expire dans ${days} jour${days > 1 ? 's' : ''}.` }
+        : { title: 'Renewal coming up ⏳', body: `${place} (${p?.tier}) expires in ${days} day${days > 1 ? 's' : ''}.` }
+    }
     case 'place_activated':
       return lang === 'fr'
         ? { title: 'Votre établissement est en ligne 🎉', body: `${place} est maintenant visible par tous les utilisateurs d'O'Kili.` }
