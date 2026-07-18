@@ -248,7 +248,7 @@ export default function ProfileScreen() {
     <AppBackground>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
         >
         <Text style={styles.title}>{lang === 'fr' ? 'Profil' : 'Profile'}</Text>

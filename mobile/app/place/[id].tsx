@@ -1335,6 +1335,7 @@ function createStyles(c: ThemeColors) {
   // Social links row
   socialRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
     gap: 10,
     marginTop: 4,
   },
@@ -1342,7 +1343,7 @@ function createStyles(c: ThemeColors) {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: c.surfaceInverted,
+    backgroundColor: c.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
