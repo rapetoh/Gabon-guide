@@ -54,6 +54,28 @@ function renderPush(type: string, p: any, lang: Lang): { title: string; body: st
       return lang === 'fr'
         ? { title: `${place} vous a répondu`, body: p?.reply_excerpt ?? 'Voir la réponse à votre avis.' }
         : { title: `${place} replied to you`, body: p?.reply_excerpt ?? 'See the reply to your review.' }
+    case 'new_review': {
+      const stars = '★'.repeat(Math.max(1, Math.min(5, p?.rating ?? 5)))
+      const who = p?.author_name ?? (lang === 'fr' ? 'Un client' : 'A customer')
+      return lang === 'fr'
+        ? { title: `Nouvel avis sur ${place} ⭐`, body: `${who} : ${stars}${p?.excerpt ? ` — « ${p.excerpt} »` : ''}` }
+        : { title: `New review on ${place} ⭐`, body: `${who}: ${stars}${p?.excerpt ? ` — “${p.excerpt}”` : ''}` }
+    }
+    case 'new_coupon': {
+      const title = lang === 'fr' ? (p?.coupon_title_fr ?? p?.coupon_title_en) : (p?.coupon_title_en ?? p?.coupon_title_fr)
+      if (p?.platform) {
+        return lang === 'fr'
+          ? { title: `Nouveau coupon O'Kili 🏷️`, body: `${title ?? 'Une nouvelle offre'} — valable dans les établissements partenaires.` }
+          : { title: `New O'Kili coupon 🏷️`, body: `${title ?? 'A new offer'} — valid at partner venues.` }
+      }
+      return lang === 'fr'
+        ? { title: `${place} : nouveau coupon 🏷️`, body: title ?? 'Une nouvelle offre vous attend.' }
+        : { title: `${place}: new coupon 🏷️`, body: title ?? 'A new offer is waiting for you.' }
+    }
+    case 'place_activated':
+      return lang === 'fr'
+        ? { title: 'Votre établissement est en ligne 🎉', body: `${place} est maintenant visible par tous les utilisateurs d'O'Kili.` }
+        : { title: 'Your place is live 🎉', body: `${place} is now visible to all O'Kili users.` }
     default:
       return lang === 'fr'
         ? { title: "O'Kili", body: 'Vous avez une nouvelle notification.' }

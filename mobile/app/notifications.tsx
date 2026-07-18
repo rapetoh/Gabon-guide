@@ -87,6 +87,48 @@ function notificationCopy(n: AppNotification, lang: 'fr' | 'en'): { title: strin
         body: p.reply_excerpt ?? (lang === 'fr' ? 'Voir la réponse à votre avis.' : 'See the reply to your review.'),
         icon: 'chatbubble-ellipses-outline', color: '#007AFF',
       }
+    case 'new_review': {
+      const stars = '★'.repeat(Math.max(1, Math.min(5, p.rating ?? 5)))
+      const who = p.author_name ?? (lang === 'fr' ? 'Un client' : 'A customer')
+      return {
+        title: lang === 'fr' ? `Nouvel avis sur ${place} ⭐` : `New review on ${place} ⭐`,
+        body: lang === 'fr'
+          ? `${who} : ${stars}${p.excerpt ? ` — « ${p.excerpt} »` : ''}`
+          : `${who}: ${stars}${p.excerpt ? ` — “${p.excerpt}”` : ''}`,
+        icon: 'star-outline', color: '#FF9F0A',
+      }
+    }
+    case 'new_coupon': {
+      const coupon = lang === 'fr' ? (p.coupon_title_fr ?? p.coupon_title_en) : (p.coupon_title_en ?? p.coupon_title_fr)
+      if (p.platform) {
+        return {
+          title: lang === 'fr' ? "Nouveau coupon O'Kili 🏷️" : "New O'Kili coupon 🏷️",
+          body: coupon ?? (lang === 'fr' ? 'Une nouvelle offre est disponible.' : 'A new offer is available.'),
+          icon: 'pricetags-outline', color: '#E8571A',
+        }
+      }
+      return {
+        title: lang === 'fr' ? `${place} : nouveau coupon 🏷️` : `${place}: new coupon 🏷️`,
+        body: coupon ?? (lang === 'fr' ? 'Une nouvelle offre vous attend.' : 'A new offer is waiting for you.'),
+        icon: 'pricetags-outline', color: '#E8571A',
+      }
+    }
+    case 'place_activated':
+      return {
+        title: lang === 'fr' ? 'Votre établissement est en ligne 🎉' : 'Your place is live 🎉',
+        body: lang === 'fr'
+          ? `${place} est maintenant visible par tous les utilisateurs d'O'Kili.`
+          : `${place} is now visible to all O'Kili users.`,
+        icon: 'storefront-outline', color: '#34C759',
+      }
+    default:
+      // Forward compatibility: a build that predates a notification type must
+      // render something rather than crash the inbox.
+      return {
+        title: "O'Kili",
+        body: lang === 'fr' ? 'Vous avez une nouvelle notification.' : 'You have a new notification.',
+        icon: 'notifications-outline', color: '#8E8E93',
+      }
   }
 }
 
@@ -144,7 +186,13 @@ export default function NotificationsScreen() {
                 <Pressable
                   key={n.id}
                   style={styles.row}
-                  onPress={() => n.payload.place_id && router.push(`/place/${n.payload.place_id}` as any)}
+                  onPress={() => {
+                    if (n.type === 'new_review') {
+                      router.push('/restaurant-admin/reviews' as any) // owner-facing: jump to the reply screen
+                    } else if (n.payload.place_id) {
+                      router.push(`/place/${n.payload.place_id}` as any)
+                    }
+                  }}
                 >
                   <View style={[styles.icon, { backgroundColor: copy.color + '1A' }]}>
                     <Ionicons name={copy.icon} size={16} color={copy.color} />
