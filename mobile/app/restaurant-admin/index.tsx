@@ -60,6 +60,26 @@ const TIER_GRADIENT_COLORS: Record<SubscriptionTier, { bg: string; fg: string }>
   premium:  { bg: 'rgba(255,159,10,0.18)',  fg: '#E8571A' },
 }
 
+// Seven tiny bars, one per day (oldest → today), scaled to the busiest day.
+// Zero days keep a faded stub so the week always reads as 7 slots.
+function MiniTrend({ values, color }: { values: number[]; color: string }) {
+  const days = values.length === 7 ? values : Array(7).fill(0)
+  const max = Math.max(...days, 1)
+  return (
+    <View style={styles.trendRow}>
+      {days.map((v, i) => (
+        <View
+          key={i}
+          style={[
+            styles.trendBar,
+            { height: 3 + (v / max) * 13, backgroundColor: color, opacity: v === 0 ? 0.22 : 0.9 },
+          ]}
+        />
+      ))}
+    </View>
+  )
+}
+
 export default function RestaurantAdminDashboard() {
   const { i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
@@ -67,7 +87,8 @@ export default function RestaurantAdminDashboard() {
   const { session } = useSession()
   const { data: place, isLoading } = useOwnedPlace(session?.user.id)
   const tier = usePlaceTier(place)
-  const { data: metrics } = usePlaceMetrics(place?.id)
+  // Stats are a tier feature (views_stat) — don't even fetch when locked
+  const { data: metrics } = usePlaceMetrics(tier.can('views_stat') ? place?.id : undefined)
   const { refreshing, onRefresh } = usePullRefresh()
 
   const totals = (metrics ?? []).reduce(
@@ -190,33 +211,39 @@ export default function RestaurantAdminDashboard() {
           </View>
         </View>
 
-        {/* Last-7-days engagement (migration 041) */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
-            {lang === 'fr' ? '7 derniers jours' : 'Last 7 days'}
-          </Text>
-          <View style={styles.metricsRow}>
-            <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
-              <Ionicons name="eye-outline" size={18} color="#0A84FF" />
-              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.views : '—'}</Text>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                {lang === 'fr' ? 'Vues' : 'Views'}
-              </Text>
-            </View>
-            <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
-              <Ionicons name="logo-whatsapp" size={18} color="#34C759" />
-              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.whatsapp : '—'}</Text>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>WhatsApp</Text>
-            </View>
-            <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
-              <Ionicons name="call-outline" size={18} color="#E8571A" />
-              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.calls : '—'}</Text>
-              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                {lang === 'fr' ? 'Appels' : 'Calls'}
-              </Text>
+        {/* Last-7-days engagement (migration 041) — views_stat tier feature.
+            Locked tiers see the "Statistics" card in "Unlock more" instead. */}
+        {tier.can('views_stat') && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+              {lang === 'fr' ? '7 derniers jours' : 'Last 7 days'}
+            </Text>
+            <View style={styles.metricsRow}>
+              <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
+                <Ionicons name="eye-outline" size={18} color="#0A84FF" />
+                <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.views : '—'}</Text>
+                <MiniTrend values={(metrics ?? []).map(d => d.views)} color="#0A84FF" />
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                  {lang === 'fr' ? 'Vues' : 'Views'}
+                </Text>
+              </View>
+              <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
+                <Ionicons name="logo-whatsapp" size={18} color="#34C759" />
+                <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.whatsapp : '—'}</Text>
+                <MiniTrend values={(metrics ?? []).map(d => d.whatsapp_taps)} color="#34C759" />
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>WhatsApp</Text>
+              </View>
+              <View style={[styles.metricCard, { backgroundColor: colors.surfaceElevated }]}>
+                <Ionicons name="call-outline" size={18} color="#E8571A" />
+                <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{metrics ? totals.calls : '—'}</Text>
+                <MiniTrend values={(metrics ?? []).map(d => d.calls)} color="#E8571A" />
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                  {lang === 'fr' ? 'Appels' : 'Calls'}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* Real (unlocked) actions */}
         <View style={styles.section}>
@@ -421,6 +448,15 @@ const styles = StyleSheet.create({
   },
   metricValue: { fontSize: 20, fontWeight: '800' },
   metricLabel: { fontSize: 11, fontWeight: '600' },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 3,
+    height: 16,
+    alignSelf: 'stretch',
+    paddingHorizontal: 6,
+  },
+  trendBar: { flex: 1, borderRadius: 2 },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
