@@ -3,7 +3,7 @@ import '../lib/i18n' // Initialize i18n before anything renders
 import { initSentry } from '../lib/sentry'
 initSentry() // async + env-gated; no-op without EXPO_PUBLIC_SENTRY_DSN
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext'
 import { PostHogProvider } from 'posthog-react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -50,13 +50,27 @@ function ThemedStatusBar() {
 const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY ?? ''
 const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com'
 
+// Freshness policy: the cache exists for SPEED, never for truth. Every screen
+// mount re-checks the server in the background (the cached copy renders
+// instantly, then updates in place), and returning from the background
+// refreshes whatever is on screen. Without refetchOnMount:'always', reopening
+// a place within staleTime showed stale data (e.g. an owner's review reply
+// missing until the app was killed — founder bug report 2026-07-18).
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // Cache data for 5 minutes before refetching
+      staleTime: 1000 * 60 * 5, // serve from cache instantly for render...
+      refetchOnMount: 'always', // ...but always revalidate on screen open
+      refetchOnWindowFocus: 'always', // and on app foreground (wired below)
       retry: 2,
     },
   },
+})
+
+// React Query only knows about "focus" on the web; on native we feed it
+// AppState so refetchOnWindowFocus fires when the app comes back to front.
+AppState.addEventListener('change', state => {
+  focusManager.setFocused(state === 'active')
 })
 
 export default function RootLayout() {
