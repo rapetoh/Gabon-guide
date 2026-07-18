@@ -27,7 +27,7 @@ export default {
     android: {
       package: 'com.okili.app',
       adaptiveIcon: {
-        backgroundColor: '#E8571A', // brand orange behind the white O' monogram
+        backgroundColor: '#ffffff', // white behind the Clair Estuaire mark
 
         foregroundImage: './assets/android-icon-foreground.png',
         monochromeImage: './assets/android-icon-monochrome.png',
