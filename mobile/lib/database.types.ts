@@ -866,6 +866,7 @@ export type Database = {
       get_all_users_for_admin: {
         Args: never
         Returns: {
+          avatar_url: string
           email: string
           full_name: string
           id: string
