@@ -121,6 +121,25 @@ function notificationCopy(n: AppNotification, lang: 'fr' | 'en'): { title: strin
           : `${place} is now visible to all O'Kili users.`,
         icon: 'storefront-outline', color: '#34C759',
       }
+    case 'tier_expiry': {
+      const days = p.days_left ?? 0
+      if (p.milestone === 'expired') {
+        return {
+          title: lang === 'fr' ? 'Abonnement expiré ⚠️' : 'Subscription expired ⚠️',
+          body: lang === 'fr'
+            ? `${place} (${p.tier}) — l'abonnement est arrivé à échéance. Pensez à encaisser le renouvellement.`
+            : `${place} (${p.tier}) — the subscription has lapsed. Time to collect the renewal.`,
+          icon: 'alert-circle-outline', color: '#FF3B30',
+        }
+      }
+      return {
+        title: lang === 'fr' ? 'Renouvellement à prévoir ⏳' : 'Renewal coming up ⏳',
+        body: lang === 'fr'
+          ? `${place} (${p.tier}) expire dans ${days} jour${days > 1 ? 's' : ''}.`
+          : `${place} (${p.tier}) expires in ${days} day${days > 1 ? 's' : ''}.`,
+        icon: 'hourglass-outline', color: '#FF9F0A',
+      }
+    }
     default:
       // Forward compatibility: a build that predates a notification type must
       // render something rather than crash the inbox.

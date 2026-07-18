@@ -12,6 +12,7 @@ export type NotificationType =
   | 'new_review'      // owner: a customer reviewed your place
   | 'new_coupon'      // customer: coupon at a favorited place / platform-wide
   | 'place_activated' // owner: your listing went live
+  | 'tier_expiry'     // ADMINS ONLY: a paid place's subscription is ending/lapsed
 
 // Written by the DB triggers in migration 039 — text is rendered client-side
 // from this payload so it always follows the user's current language.
@@ -29,6 +30,9 @@ export interface NotificationPayload {
   author_name?: string | null
   excerpt?: string | null
   platform?: boolean
+  tier?: string
+  milestone?: 'soon' | 'expired'
+  days_left?: number
 }
 
 export interface AppNotification {
