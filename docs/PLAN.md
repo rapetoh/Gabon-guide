@@ -2037,6 +2037,9 @@ All work is on `dev`, commits 113f903..c57c0bc+. Verified means "SQL sim with ro
 - Interim no-push build was ALSO impossible: expo-notifications requests aps-environment just by being installed (auto-linked plugin), and uninstalling it breaks the bundle. **RESOLVED 2026-07-17 ~23:15**: founder ran the interactive build, logged into Apple ("Synced capabilities: Enabled: Push Notifications", profile NK4NKN6359 regenerated) → **build #16 (v1.0.0) FINISHED and founder submitted it to TestFlight himself**. Builds 13–15 remain errored husks; ignore them.
 - **expo-device is BANNED from this repo**: PostHog eagerly requires it if present in node_modules → crashes every binary built before it existed. Same class of bug: probe `requireOptionalNativeModule()` before importing any newly-added native package (see `usePushRegistration`, `lib/sentry.ts`).
 
+### Notification coverage v2 (2026-07-18, migration 044)
+Founder asked "are we covering every case?" — gap review found the owner side had ZERO notifications. Added: **new_review→owner** (deep-links to reply screen), **new_coupon→favoriters** of the place (platform-wide coupon → every non-blocked user), **place_activated→owner**. Deliberately silent: events the user performed themselves. Parked as cron work: weekly owner digest, coupon-expiry reminder, tier-expiry warning. send_push v2 deployed; inbox got a default fallback (unknown types render generic instead of crashing) — **builds ≤16 crash on unknown-type rows, so ship the next build before generating new-type events for outside testers**.
+
 ### Founder checklist (in his lane: clicks + credentials + devices)
 1. Supabase dashboard → Auth → URL Configuration → add `https://okili-admin.vercel.app/auth/callback` to Redirect URLs.
 2. Create Sentry account + 2 projects (React Native, Next.js), paste both DSNs in chat.
