@@ -2040,7 +2040,7 @@ All work is on `dev`, commits 113f903..c57c0bc+. Verified means "SQL sim with ro
 ### Founder checklist (in his lane: clicks + credentials + devices)
 1. Supabase dashboard → Auth → URL Configuration → add `https://okili-admin.vercel.app/auth/callback` to Redirect URLs.
 2. Create Sentry account + 2 projects (React Native, Next.js), paste both DSNs in chat.
-3. ~~Push build~~ **DONE by founder 2026-07-17**: build #16 built + submitted with push entitlements. Remaining: install it from TestFlight on Senyo iPhone, accept the push permission prompt, then have the agent fire a test notification to verify banner delivery on hardware. EAS regenerates the profile with the Push capability (key 423ZGLXN46 already assigned) and the build proceeds; then `npx eas-cli submit -p ios --latest`. After it's on your iPhone: accept the push prompt and have the agent fire a test notification.
+3. ~~Push build~~ **DONE by founder 2026-07-17**: build #16 built + submitted with push entitlements. **Push verified on hardware 2026-07-17 ~23:24**: banner delivered to the founder's lock screen (build #16, account rx@hotmail.com, EN copy). The full notification chain is production-proven. EAS regenerates the profile with the Push capability (key 423ZGLXN46 already assigned) and the build proceeds; then `npx eas-cli submit -p ios --latest`. After it's on your iPhone: accept the push prompt and have the agent fire a test notification.
 4. Log in as the owner test account once to eyeball the "Last 7 days" card.
 5. Review `docs/STORE_LISTING.md` wording (2 ⚠ items: age rating answer, support URL).
 6. Still deferred (unchanged): payments, owner claim flow, tier-expiry cron, help screen, admin FR, email-confirmation toggle + SMTP, leaked-password protection.
