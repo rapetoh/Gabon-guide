@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   StyleSheet,
@@ -29,6 +30,7 @@ import { useMyReferral } from '../../hooks/useReferrals'
 import { useCreditBalance } from '../../hooks/useCredit'
 import { encodeCreditQrPayload, useMyCoupons, type MyCouponEntry } from '../../hooks/useCouponRedemption'
 import { CouponQrModal } from '../../components/place/CouponsBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { disableProximity, enableProximity, isProximityEnabled } from '../../lib/proximity'
 import { supabase } from '../../lib/supabase'
 import { ThemeColors, AppTheme } from '../../constants/themes'
@@ -79,6 +81,7 @@ export default function ProfileScreen() {
   const [walletCoupon, setWalletCoupon] = useState<MyCouponEntry | null>(null)
   const [referralPromptOpen, setReferralPromptOpen] = useState(false)
   const [proximityOn, setProximityOn] = useState(false)
+  const { refreshing, onRefresh } = usePullRefresh()
 
   useEffect(() => {
     isProximityEnabled().then(setProximityOn).catch(() => {})
@@ -250,6 +253,7 @@ export default function ProfileScreen() {
         <ScrollView
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}
         >
         <Text style={styles.title}>{lang === 'fr' ? 'Profil' : 'Profile'}</Text>
 

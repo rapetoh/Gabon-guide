@@ -13,6 +13,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   StyleSheet,
@@ -26,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { usePlace } from '../../hooks/usePlace'
 import { logPlaceEvent } from '../../hooks/usePlaceMetrics'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useFavorites } from '../../hooks/useFavorites'
 import { useReviews, useUserReview, useSubmitReview, useDeleteReview } from '../../hooks/useReviews'
@@ -79,6 +81,7 @@ export default function PlaceDetailScreen() {
   const { session } = useSession()
   const analytics = useAnalytics()
   const { data: place, isLoading } = usePlace(id)
+  const { refreshing, onRefresh } = usePullRefresh()
   const tier = usePlaceTier(place)
   const { isFavorite, toggleFavorite } = useFavorites()
   const { data: reviewsData } = useReviews(id)
@@ -394,6 +397,7 @@ export default function PlaceDetailScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}
       >
         {/* ── Hero ── */}
         <View style={styles.hero}>

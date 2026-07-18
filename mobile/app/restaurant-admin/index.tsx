@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 
 import { useSession } from '../../hooks/useSession'
 import { usePlaceMetrics } from '../../hooks/usePlaceMetrics'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { usePlaceTier } from '../../hooks/usePlaceTier'
 import { useThemeColors } from '../../contexts/ThemeContext'
 import { supabase } from '../../lib/supabase'
@@ -67,6 +68,7 @@ export default function RestaurantAdminDashboard() {
   const { data: place, isLoading } = useOwnedPlace(session?.user.id)
   const tier = usePlaceTier(place)
   const { data: metrics } = usePlaceMetrics(place?.id)
+  const { refreshing, onRefresh } = usePullRefresh()
 
   const totals = (metrics ?? []).reduce(
     (acc, d) => ({
@@ -139,7 +141,11 @@ export default function RestaurantAdminDashboard() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32, gap: 16 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 32, gap: 16 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8571A" />}
+      >
         {/* Place card */}
         <View style={[styles.placeCard, { backgroundColor: colors.surfaceElevated }]}>
           {photoUrl ? (
