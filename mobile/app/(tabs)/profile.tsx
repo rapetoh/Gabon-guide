@@ -14,6 +14,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -28,6 +29,7 @@ import { useMyReferral } from '../../hooks/useReferrals'
 import { useCreditBalance } from '../../hooks/useCredit'
 import { encodeCreditQrPayload, useMyCoupons, type MyCouponEntry } from '../../hooks/useCouponRedemption'
 import { CouponQrModal } from '../../components/place/CouponsBlock'
+import { disableProximity, enableProximity, isProximityEnabled } from '../../lib/proximity'
 import { supabase } from '../../lib/supabase'
 import { ThemeColors, AppTheme } from '../../constants/themes'
 
@@ -76,6 +78,30 @@ export default function ProfileScreen() {
   const [creditApplied, setCreditApplied] = useState<{ amount: number } | null>(null)
   const [walletCoupon, setWalletCoupon] = useState<MyCouponEntry | null>(null)
   const [referralPromptOpen, setReferralPromptOpen] = useState(false)
+  const [proximityOn, setProximityOn] = useState(false)
+
+  useEffect(() => {
+    isProximityEnabled().then(setProximityOn).catch(() => {})
+  }, [])
+
+  async function handleProximityToggle(next: boolean) {
+    if (next) {
+      setProximityOn(true) // optimistic; reverted if permission is refused
+      const ok = await enableProximity().catch(() => false)
+      if (!ok) {
+        setProximityOn(false)
+        Alert.alert(
+          lang === 'fr' ? 'Autorisation requise' : 'Permission needed',
+          lang === 'fr'
+            ? 'Pour vous signaler les bons plans quand vous passez à côté, O\'Kili a besoin de l\'autorisation de position « Toujours » (Réglages → O\'Kili → Position).'
+            : 'To alert you about deals as you walk by, O\'Kili needs the "Always" location permission (Settings → O\'Kili → Location).',
+        )
+      }
+    } else {
+      setProximityOn(false)
+      disableProximity().catch(() => {})
+    }
+  }
   const [referralCodeInput, setReferralCodeInput] = useState('')
   const [claimingCode, setClaimingCode] = useState(false)
   const qc = useQueryClient()
@@ -337,6 +363,30 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
+
+          {/* Proximity deal alerts — opt-in, needs "Always" location */}
+          {session && (
+            <View style={styles.row}>
+              <View style={[styles.rowIcon, { backgroundColor: 'rgba(52,199,89,0.1)' }]}>
+                <Ionicons name="location-outline" size={18} color="#34C759" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowLabel}>
+                  {lang === 'fr' ? 'Bons plans à proximité' : 'Nearby deal alerts'}
+                </Text>
+                <Text style={styles.rowHint}>
+                  {lang === 'fr'
+                    ? 'Une alerte (max 1/jour) quand vous passez près d’un coupon en cours'
+                    : 'One alert (max 1/day) when you walk by a live coupon'}
+                </Text>
+              </View>
+              <Switch
+                value={proximityOn}
+                onValueChange={handleProximityToggle}
+                trackColor={{ true: '#34C759' }}
+              />
+            </View>
+          )}
         </View>
 
         {/* Welcome credit + referral combined card.
@@ -866,6 +916,12 @@ function createStyles(c: ThemeColors) {
       fontSize: 12,
       color: c.textSecondary,
       marginTop: 1,
+    },
+    rowHint: {
+      fontSize: 11,
+      color: c.textSecondary,
+      marginTop: 2,
+      lineHeight: 14,
     },
     // Language FR/EN segmented pill
     segmentWrap: {

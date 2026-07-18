@@ -1009,6 +1009,17 @@ export type Database = {
           whatsapp_taps: number
         }[]
       }
+      get_proximity_targets: {
+        Args: { p_lat: number; p_lon: number; p_limit?: number }
+        Returns: {
+          coupon_title_en: string
+          coupon_title_fr: string
+          latitude: number
+          longitude: number
+          name: string
+          place_id: string
+        }[]
+      }
       grant_referral_reward: { Args: { p_user_id: string }; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
       is_blocked: { Args: never; Returns: boolean }

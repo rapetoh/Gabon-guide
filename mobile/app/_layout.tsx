@@ -12,9 +12,13 @@ import { StatusBar } from 'expo-status-bar'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, View } from 'react-native'
 
+import '../lib/proximity' // define the geofence task before anything renders (guarded no-op on old binaries)
+
 import { supabase } from '../lib/supabase'
+import { refreshProximityTargets } from '../lib/proximity'
 import { useOnboardingPrefsSync } from '../hooks/useOnboardingPrefsSync'
 import { usePushRegistration } from '../hooks/usePushRegistration'
+import { AppState } from 'react-native'
 
 export const ONBOARDING_KEY = 'onboarding_completed'
 
@@ -24,6 +28,17 @@ export const ONBOARDING_KEY = 'onboarding_completed'
 function SessionSideEffects() {
   usePushRegistration()
   useOnboardingPrefsSync()
+
+  // Keep the proximity fences aimed at the nearest coupon-running places —
+  // re-aim on every app foreground (no-op unless the user opted in).
+  useEffect(() => {
+    refreshProximityTargets().catch(() => {})
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') refreshProximityTargets().catch(() => {})
+    })
+    return () => sub.remove()
+  }, [])
+
   return null
 }
 

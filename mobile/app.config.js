@@ -57,9 +57,10 @@ export default {
         'expo-location',
         {
           locationAlwaysAndWhenInUsePermission:
-            'O\'Kili utilise votre position pour trouver les lieux près de vous.',
+            'O\'Kili utilise votre position pour trouver les lieux près de vous et, si vous l\'activez, vous signaler les bons plans quand vous passez à proximité.',
           locationWhenInUsePermission:
             'O\'Kili utilise votre position pour trouver les lieux près de vous.',
+          isAndroidBackgroundLocationEnabled: true,
         },
       ],
       [
