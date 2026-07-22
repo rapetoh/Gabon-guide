@@ -358,8 +358,7 @@ export default function ProfileScreen() {
             or a referral code to share. */}
         {session && (creditBalance > 0 || referral?.code || canClaimReferral) && (
           <View style={styles.creditSection}>
-            {creditBalance > 0 ? (
-              <View style={styles.bankCardShadow}>
+            <View style={styles.bankCardShadow}>
               <LinearGradient
                 colors={['#26262A', '#1C1C1E', '#141416']}
                 start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }}
@@ -420,32 +419,6 @@ export default function ProfileScreen() {
                 </View>
               </LinearGradient>
               </View>
-            ) : (
-              /* Zero state — card waiting to be activated */
-              <View style={styles.bankCardEmpty}>
-                <View style={styles.bankWatermark}>
-                  <EstuaireMark size={130} fg={colors.textPrimary} accent={colors.textPrimary} />
-                </View>
-                <View style={styles.bankBrandRow}>
-                  <EstuaireMark size={26} fg={colors.textPrimary} />
-                  <Text style={[styles.bankBrand, { color: colors.textPrimary }]}>
-                    O<Text style={{ color: '#E8571A' }}>'</Text>Kili <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Credit</Text>
-                  </Text>
-                </View>
-                <View style={{ marginTop: 'auto' }}>
-                  <Text style={[styles.bankLabel, { color: colors.textSecondary }]}>{lang === 'fr' ? 'SOLDE DISPONIBLE' : 'AVAILABLE BALANCE'}</Text>
-                  <View style={styles.bankBalanceRow}>
-                    <Text style={[styles.bankBalance, { color: colors.textTertiary }]}>0</Text>
-                    <Text style={[styles.bankCurrency, { color: colors.textTertiary }]}>FCFA</Text>
-                  </View>
-                </View>
-                <Text style={styles.bankEmptyHint}>
-                  {lang === 'fr'
-                    ? 'Votre carte s\'active dès votre premier parrainage.'
-                    : 'Your card activates with your first referral.'}
-                </Text>
-              </View>
-            )}
 
             {/* stats strip */}
             <View style={styles.bankStatsRow}>
@@ -1138,16 +1111,6 @@ function createStyles(c: ThemeColors) {
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.08)',
     },
-    bankCardEmpty: {
-      borderRadius: 22,
-      overflow: 'hidden',
-      height: 200,
-      padding: 18,
-      backgroundColor: c.surfaceElevated,
-      borderWidth: 1.5,
-      borderStyle: 'dashed',
-      borderColor: c.separator,
-    },
     bankWatermark: { position: 'absolute', right: -44, bottom: -62, opacity: 0.10 },
     bankTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     bankBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1176,7 +1139,6 @@ function createStyles(c: ThemeColors) {
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     bankHolder: { fontSize: 12.5, fontWeight: '700', color: '#fff', maxWidth: 140 },
-    bankEmptyHint: { fontSize: 12, color: c.textSecondary, lineHeight: 17, marginTop: 12 },
     bankStatsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
     bankStat: {
       flex: 1, backgroundColor: c.surfaceElevated, borderRadius: 12,
