@@ -23,6 +23,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 
+import { LinearGradient } from 'expo-linear-gradient'
+import Svg, { Circle, ClipPath, Defs, G, Path } from 'react-native-svg'
+
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { useSession } from '../../hooks/useSession'
 import { useProfile } from '../../hooks/useProfile'
@@ -56,6 +59,24 @@ function scopeNamesLabel(names: string[]): string {
   return names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '')
 }
 
+// Estuaire brand mark (same paths as the app icon / design handoff)
+function EstuaireMark({ size = 26, fg = '#fff', accent = '#E8571A', water = 'transparent' }: {
+  size?: number; fg?: string; accent?: string; water?: string
+}) {
+  const uid = `est${size}${fg.replace(/[^a-z0-9]/gi, '')}`
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <Defs><ClipPath id={uid}><Circle cx="50" cy="50" r="33" /></ClipPath></Defs>
+      <Circle cx="50" cy="50" r="42" fill="none" stroke={fg} strokeWidth="9" />
+      <G clipPath={`url(#${uid})`}>
+        <Circle cx="50" cy="52" r="16" fill={accent} />
+        <Path d="M10 62 Q20 56 30 62 T50 62 T70 62 T90 62 L90 90 L10 90 Z" fill={fg} />
+        <Path d="M10 73 Q20 67 30 73 T50 73 T70 73 T90 73" fill="none" stroke={water} strokeWidth="3" />
+      </G>
+    </Svg>
+  )
+}
+
 const THEME_OPTIONS: { key: AppTheme; labelFr: string; labelEn: string }[] = [
   { key: 'clean',   labelFr: 'Clair',   labelEn: 'Light'  },
   { key: 'vibrant', labelFr: 'Vif',     labelEn: 'Vivid'  },
@@ -72,6 +93,23 @@ export default function ProfileScreen() {
   const { data: referral } = useMyReferral()
   const { data: credit } = useCreditBalance()
   const { data: myCoupons } = useMyCoupons()
+
+  // "Coupons utilisés" tile on the credit card
+  const { data: usedCouponsCount } = useQuery({
+    queryKey: ['used-coupons-count', session?.user.id],
+    queryFn: async (): Promise<number> => {
+      if (!session) return 0
+      const { count, error } = await supabase
+        .from('coupon_redemptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .not('redeemed_at', 'is', null)
+      if (error) throw error
+      return count ?? 0
+    },
+    enabled: !!session,
+    staleTime: 60_000,
+  })
   const lang = i18n.language === 'en' ? 'en' : 'fr'
 
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -315,58 +353,114 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Welcome credit + referral combined card.
+        {/* O'Kili Credit — bank-card treatment (design handoff "La carte").
             Surfaced whenever the user is signed in and either has credit
             or a referral code to share. */}
         {session && (creditBalance > 0 || referral?.code || canClaimReferral) && (
-          <View style={styles.creditCard}>
-            <View style={styles.creditHeader}>
-              <View style={[styles.rowIcon, { backgroundColor: 'rgba(232,87,26,0.1)' }]}>
-                <Ionicons name="gift" size={18} color="#E8571A" />
+          <View style={styles.creditSection}>
+            {creditBalance > 0 ? (
+              <LinearGradient
+                colors={['#26262A', '#1C1C1E', '#141416']}
+                start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }}
+                style={styles.bankCard}
+              >
+                {/* sunset glow + oversized watermark */}
+                <View style={styles.bankGlowOuter} />
+                <View style={styles.bankGlowInner} />
+                <View style={styles.bankWatermark}>
+                  <EstuaireMark size={190} fg="#fff" accent="#fff" />
+                </View>
+                <View style={styles.bankTopRow}>
+                  <View style={styles.bankBrandRow}>
+                    <EstuaireMark size={26} />
+                    <Text style={styles.bankBrand}>
+                      O<Text style={{ color: '#E8571A' }}>'</Text>Kili <Text style={styles.bankBrandLight}>Credit</Text>
+                    </Text>
+                  </View>
+                  <View style={styles.bankPill}>
+                    <Text style={styles.bankPillText}>{lang === 'fr' ? 'MEMBRE' : 'MEMBER'}</Text>
+                  </View>
+                </View>
+                <View style={{ marginTop: 'auto' }}>
+                  <Text style={styles.bankLabel}>{lang === 'fr' ? 'SOLDE DISPONIBLE' : 'AVAILABLE BALANCE'}</Text>
+                  <View style={styles.bankBalanceRow}>
+                    <Text style={styles.bankBalance}>{creditBalance.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}</Text>
+                    <Text style={styles.bankCurrency}>FCFA</Text>
+                  </View>
+                </View>
+                <View style={styles.bankBottomRow}>
+                  {referral?.code ? (
+                    <View>
+                      <Text style={styles.bankSmallLabel}>{lang === 'fr' ? 'CODE PARRAIN' : 'REFERRAL CODE'}</Text>
+                      <Pressable onPress={handleShareReferral} style={styles.bankCodeChip} hitSlop={6}>
+                        <Text style={styles.bankCode}>{referral.code}</Text>
+                        <Ionicons name="copy-outline" size={13} color="rgba(255,255,255,0.8)" />
+                      </Pressable>
+                    </View>
+                  ) : <View />}
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.bankSmallLabel}>{lang === 'fr' ? 'TITULAIRE' : 'HOLDER'}</Text>
+                    <Text style={styles.bankHolder} numberOfLines={1}>{displayName}</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            ) : (
+              /* Zero state — card waiting to be activated */
+              <View style={styles.bankCardEmpty}>
+                <View style={styles.bankWatermark}>
+                  <EstuaireMark size={190} fg={colors.textPrimary} accent={colors.textPrimary} />
+                </View>
+                <View style={styles.bankBrandRow}>
+                  <EstuaireMark size={26} fg={colors.textPrimary} />
+                  <Text style={[styles.bankBrand, { color: colors.textPrimary }]}>
+                    O<Text style={{ color: '#E8571A' }}>'</Text>Kili <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Credit</Text>
+                  </Text>
+                </View>
+                <View style={{ marginTop: 'auto' }}>
+                  <Text style={[styles.bankLabel, { color: colors.textSecondary }]}>{lang === 'fr' ? 'SOLDE DISPONIBLE' : 'AVAILABLE BALANCE'}</Text>
+                  <View style={styles.bankBalanceRow}>
+                    <Text style={[styles.bankBalance, { color: colors.textTertiary }]}>0</Text>
+                    <Text style={[styles.bankCurrency, { color: colors.textTertiary }]}>FCFA</Text>
+                  </View>
+                </View>
+                <Text style={styles.bankEmptyHint}>
+                  {lang === 'fr'
+                    ? 'Votre carte s\'active dès votre premier parrainage.'
+                    : 'Your card activates with your first referral.'}
+                </Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.creditLabel}>
-                  {lang === 'fr' ? 'Crédit O\'Kili' : 'O\'Kili credit'}
-                </Text>
-                <Text style={styles.creditAmount}>
-                  {formatFcfa(creditBalance, lang)}
-                </Text>
+            )}
+
+            {/* stats strip */}
+            <View style={styles.bankStatsRow}>
+              <View style={styles.bankStat}>
+                <Text style={styles.bankStatValue}>{referral?.invitedCount ?? 0}</Text>
+                <Text style={styles.bankStatLabel}>{lang === 'fr' ? 'Amis invités' : 'Friends invited'}</Text>
+              </View>
+              <View style={styles.bankStat}>
+                <Text style={styles.bankStatValue}>{(credit?.lifetime_earned ?? 0).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}</Text>
+                <Text style={styles.bankStatLabel}>{lang === 'fr' ? 'FCFA gagnés' : 'FCFA earned'}</Text>
+              </View>
+              <View style={styles.bankStat}>
+                <Text style={styles.bankStatValue}>{usedCouponsCount ?? 0}</Text>
+                <Text style={styles.bankStatLabel}>{lang === 'fr' ? 'Coupons utilisés' : 'Coupons used'}</Text>
               </View>
             </View>
-            <Text style={styles.creditHint}>
-              {creditBalance > 0
-                ? (lang === 'fr'
-                    ? 'À utiliser dans n\'importe quel restaurant O\'Kili. Montrez votre QR au moment de payer.'
-                    : 'Spend it at any O\'Kili restaurant. Show your QR when paying.')
-                : (lang === 'fr'
-                    ? 'Invitez un ami avec votre code pour gagner du crédit utilisable partout.'
-                    : 'Invite a friend with your code to earn credit you can spend anywhere.')}
-            </Text>
-            <View style={styles.creditActions}>
-              {creditBalance > 0 && creditQrPayload && (
-                <Pressable onPress={() => setCreditQrOpen(true)} style={styles.creditPrimaryBtn}>
-                  <Ionicons name="qr-code-outline" size={16} color="#fff" />
-                  <Text style={styles.creditPrimaryBtnText}>
-                    {lang === 'fr' ? 'Mon QR de crédit' : 'My credit QR'}
-                  </Text>
-                </Pressable>
-              )}
-              {referral?.code && (
-                <Pressable onPress={handleShareReferral} style={[styles.creditSecondaryBtn, creditBalance === 0 && styles.creditPrimaryBtn]}>
-                  <Ionicons name="share-outline" size={16} color={creditBalance === 0 ? '#fff' : '#E8571A'} />
-                  <Text style={[styles.creditSecondaryBtnText, creditBalance === 0 && styles.creditPrimaryBtnText]}>
-                    {lang === 'fr' ? 'Partager mon code' : 'Share my code'}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
+
+            {/* actions */}
             {referral?.code && (
-              <Text style={styles.creditFootnote}>
-                {lang === 'fr' ? 'Code : ' : 'Code: '}
-                <Text style={styles.creditCodeMono}>{referral.code}</Text>
-                {' · '}
-                {t('referral.invited', { count: referral.invitedCount })}
-              </Text>
+              <Pressable onPress={handleShareReferral} style={styles.bankShareBtn}>
+                <Ionicons name="share-outline" size={17} color="#fff" />
+                <Text style={styles.bankShareBtnText}>{lang === 'fr' ? 'Partager mon code' : 'Share my code'}</Text>
+              </Pressable>
+            )}
+            {creditBalance > 0 && creditQrPayload && (
+              <Pressable onPress={() => setCreditQrOpen(true)} style={styles.bankQrBtn}>
+                <Ionicons name="qr-code-outline" size={16} color={colors.textPrimary} />
+                <Text style={[styles.bankQrBtnText, { color: colors.textPrimary }]}>
+                  {lang === 'fr' ? 'Mon QR de crédit' : 'My credit QR'}
+                </Text>
+              </Pressable>
             )}
             {canClaimReferral && (
               <Pressable
@@ -391,6 +485,11 @@ export default function ProfileScreen() {
               </Text>
               <Ionicons name="chevron-forward" size={14} color="#E8571A" />
             </Pressable>
+            <Text style={styles.bankFootnote}>
+              {lang === 'fr'
+                ? 'Invitez un ami avec votre code — vous gagnez tous les deux du crédit à dépenser partout.'
+                : 'Invite a friend with your code — you both earn credit to spend anywhere.'}
+            </Text>
           </View>
         )}
 
@@ -1002,7 +1101,97 @@ function createStyles(c: ThemeColors) {
       color: c.textPrimary,
       lineHeight: 18,
     },
-    // ── Welcome credit / referral card ─────────────────────────
+    // ── O'Kili Credit bank card (design "La carte") ────────────
+    creditSection: { marginBottom: 4 },
+    bankCard: {
+      borderRadius: 22,
+      overflow: 'hidden',
+      aspectRatio: 1.62,
+      padding: 18,
+      shadowColor: '#1C1C1E',
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.3,
+      shadowRadius: 22,
+      elevation: 8,
+    },
+    bankCardEmpty: {
+      borderRadius: 22,
+      overflow: 'hidden',
+      aspectRatio: 1.62,
+      padding: 18,
+      backgroundColor: c.surfaceElevated,
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: c.separator,
+    },
+    bankGlowOuter: {
+      position: 'absolute', right: -60, top: -70,
+      width: 240, height: 240, borderRadius: 120,
+      backgroundColor: 'rgba(232,87,26,0.20)',
+    },
+    bankGlowInner: {
+      position: 'absolute', right: -10, top: -30,
+      width: 140, height: 140, borderRadius: 70,
+      backgroundColor: 'rgba(232,87,26,0.22)',
+    },
+    bankWatermark: { position: 'absolute', right: -34, bottom: -46, opacity: 0.13 },
+    bankTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    bankBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    bankBrand: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
+    bankBrandLight: { fontWeight: '600', color: 'rgba(255,255,255,0.65)' },
+    bankPill: {
+      paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
+      backgroundColor: 'rgba(232,87,26,0.18)',
+      borderWidth: 1, borderColor: 'rgba(232,87,26,0.35)',
+    },
+    bankPillText: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.2, color: '#FF9A66' },
+    bankLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 1.4, color: 'rgba(255,255,255,0.55)' },
+    bankBalanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7, marginTop: 3 },
+    bankBalance: { fontSize: 34, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+    bankCurrency: { fontSize: 14, fontWeight: '700', color: '#FF9A66' },
+    bankBottomRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 12 },
+    bankSmallLabel: { fontSize: 9, fontWeight: '600', letterSpacing: 1.3, color: 'rgba(255,255,255,0.45)', marginBottom: 3 },
+    bankCodeChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 7,
+      paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+      backgroundColor: 'rgba(255,255,255,0.09)',
+      borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+    },
+    bankCode: {
+      fontSize: 13, fontWeight: '600', letterSpacing: 2.4, color: '#fff',
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    bankHolder: { fontSize: 12.5, fontWeight: '700', color: '#fff', maxWidth: 140 },
+    bankEmptyHint: { fontSize: 12, color: c.textSecondary, lineHeight: 17, marginTop: 12 },
+    bankStatsRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+    bankStat: {
+      flex: 1, backgroundColor: c.surfaceElevated, borderRadius: 14,
+      paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center',
+      borderWidth: StyleSheet.hairlineWidth, borderColor: c.separator,
+    },
+    bankStatValue: { fontSize: 18, fontWeight: '800', color: c.textPrimary },
+    bankStatLabel: { fontSize: 10, color: c.textSecondary, marginTop: 1 },
+    bankShareBtn: {
+      height: 50, marginTop: 12, borderRadius: 999,
+      backgroundColor: '#E8571A',
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
+      shadowColor: '#E8571A', shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    },
+    bankShareBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+    bankQrBtn: {
+      height: 44, marginTop: 10, borderRadius: 999,
+      backgroundColor: c.surfaceElevated,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: c.separator,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    },
+    bankQrBtnText: { fontSize: 14, fontWeight: '700' },
+    bankFootnote: {
+      fontSize: 11.5, color: c.textSecondary, textAlign: 'center',
+      marginTop: 10, lineHeight: 17, paddingHorizontal: 12,
+    },
+
+    // ── Welcome credit / referral card (legacy styles kept for links) ──
     creditCard: {
       marginHorizontal: 24,
       marginBottom: 16,

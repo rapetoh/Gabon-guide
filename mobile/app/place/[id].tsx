@@ -160,7 +160,6 @@ export default function PlaceDetailScreen() {
   const category = p.categories
   const zone = p.zones
   const openStatus = p.hours ? isOpenNow(p.hours as unknown as import('../../lib/database.types').PlaceHours) : null
-  const hasAnySocial = !!(p.social_instagram || p.social_facebook || p.social_tiktok)
 
   function handleWhatsApp() {
     const url = getWhatsAppUrl(p.whatsapp)
@@ -552,26 +551,10 @@ export default function PlaceDetailScreen() {
             )}
           </View>
 
-          {/* ── Social links (Standard+) ── */}
-          {tier.can('social_links') && hasAnySocial && (
-            <View style={styles.socialRow}>
-              {p.social_instagram && (
-                <Pressable style={styles.socialBtn} onPress={() => Linking.openURL(p.social_instagram!)}>
-                  <Ionicons name="logo-instagram" size={20} color="#E4405F" />
-                </Pressable>
-              )}
-              {p.social_facebook && (
-                <Pressable style={styles.socialBtn} onPress={() => Linking.openURL(p.social_facebook!)}>
-                  <Ionicons name="logo-facebook" size={20} color="#1877F2" />
-                </Pressable>
-              )}
-              {p.social_tiktok && (
-                <Pressable style={styles.socialBtn} onPress={() => Linking.openURL(p.social_tiktok!)}>
-                  <Ionicons name="logo-tiktok" size={20} color={colors.textPrimary} />
-                </Pressable>
-              )}
-            </View>
-          )}
+          {/* Social links intentionally NOT rendered (founder decision
+              2026-07-21): outbound social buttons walk users out of the app
+              with no return path. Data still collected in admin forms for
+              future use. */}
 
           {/* ── Coupons (active only) ── */}
           <CouponsBlock placeId={p.id} />
