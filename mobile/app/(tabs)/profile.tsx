@@ -24,7 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 
 import { LinearGradient } from 'expo-linear-gradient'
-import Svg, { Circle, ClipPath, Defs, G, Path } from 'react-native-svg'
+import Svg, { Circle, ClipPath, Defs, G, Path, RadialGradient, Stop } from 'react-native-svg'
 
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { useSession } from '../../hooks/useSession'
@@ -364,11 +364,19 @@ export default function ProfileScreen() {
                 start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }}
                 style={styles.bankCard}
               >
-                {/* sunset glow + oversized watermark */}
-                <View style={styles.bankGlowOuter} />
-                <View style={styles.bankGlowInner} />
+                {/* soft sunset glow (true radial falloff) + corner watermark */}
+                <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+                  <Defs>
+                    <RadialGradient id="sunGlow" cx="88%" cy="0%" r="65%">
+                      <Stop offset="0%" stopColor="#E8571A" stopOpacity="0.45" />
+                      <Stop offset="55%" stopColor="#E8571A" stopOpacity="0.10" />
+                      <Stop offset="100%" stopColor="#E8571A" stopOpacity="0" />
+                    </RadialGradient>
+                  </Defs>
+                  <Circle cx="88%" cy="0%" r="65%" fill="url(#sunGlow)" />
+                </Svg>
                 <View style={styles.bankWatermark}>
-                  <EstuaireMark size={190} fg="#fff" accent="#fff" />
+                  <EstuaireMark size={130} fg="#fff" accent="#fff" />
                 </View>
                 <View style={styles.bankTopRow}>
                   <View style={styles.bankBrandRow}>
@@ -408,7 +416,7 @@ export default function ProfileScreen() {
               /* Zero state — card waiting to be activated */
               <View style={styles.bankCardEmpty}>
                 <View style={styles.bankWatermark}>
-                  <EstuaireMark size={190} fg={colors.textPrimary} accent={colors.textPrimary} />
+                  <EstuaireMark size={130} fg={colors.textPrimary} accent={colors.textPrimary} />
                 </View>
                 <View style={styles.bankBrandRow}>
                   <EstuaireMark size={26} fg={colors.textPrimary} />
@@ -1104,37 +1112,27 @@ function createStyles(c: ThemeColors) {
     // ── O'Kili Credit bank card (design "La carte") ────────────
     creditSection: { marginBottom: 4 },
     bankCard: {
-      borderRadius: 22,
+      borderRadius: 20,
       overflow: 'hidden',
-      aspectRatio: 1.62,
-      padding: 18,
+      height: 190,
+      padding: 16,
       shadowColor: '#1C1C1E',
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: 0.3,
-      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.25,
+      shadowRadius: 18,
       elevation: 8,
     },
     bankCardEmpty: {
-      borderRadius: 22,
+      borderRadius: 20,
       overflow: 'hidden',
-      aspectRatio: 1.62,
-      padding: 18,
+      height: 190,
+      padding: 16,
       backgroundColor: c.surfaceElevated,
       borderWidth: 1.5,
       borderStyle: 'dashed',
       borderColor: c.separator,
     },
-    bankGlowOuter: {
-      position: 'absolute', right: -60, top: -70,
-      width: 240, height: 240, borderRadius: 120,
-      backgroundColor: 'rgba(232,87,26,0.20)',
-    },
-    bankGlowInner: {
-      position: 'absolute', right: -10, top: -30,
-      width: 140, height: 140, borderRadius: 70,
-      backgroundColor: 'rgba(232,87,26,0.22)',
-    },
-    bankWatermark: { position: 'absolute', right: -34, bottom: -46, opacity: 0.13 },
+    bankWatermark: { position: 'absolute', right: -38, bottom: -48, opacity: 0.07 },
     bankTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     bankBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     bankBrand: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
@@ -1145,11 +1143,11 @@ function createStyles(c: ThemeColors) {
       borderWidth: 1, borderColor: 'rgba(232,87,26,0.35)',
     },
     bankPillText: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.2, color: '#FF9A66' },
-    bankLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 1.4, color: 'rgba(255,255,255,0.55)' },
-    bankBalanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7, marginTop: 3 },
-    bankBalance: { fontSize: 34, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-    bankCurrency: { fontSize: 14, fontWeight: '700', color: '#FF9A66' },
-    bankBottomRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 12 },
+    bankLabel: { fontSize: 9.5, fontWeight: '600', letterSpacing: 1.3, color: 'rgba(255,255,255,0.55)' },
+    bankBalanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 },
+    bankBalance: { fontSize: 30, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+    bankCurrency: { fontSize: 13, fontWeight: '700', color: '#FF9A66' },
+    bankBottomRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10 },
     bankSmallLabel: { fontSize: 9, fontWeight: '600', letterSpacing: 1.3, color: 'rgba(255,255,255,0.45)', marginBottom: 3 },
     bankCodeChip: {
       flexDirection: 'row', alignItems: 'center', gap: 7,
@@ -1163,16 +1161,16 @@ function createStyles(c: ThemeColors) {
     },
     bankHolder: { fontSize: 12.5, fontWeight: '700', color: '#fff', maxWidth: 140 },
     bankEmptyHint: { fontSize: 12, color: c.textSecondary, lineHeight: 17, marginTop: 12 },
-    bankStatsRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+    bankStatsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
     bankStat: {
-      flex: 1, backgroundColor: c.surfaceElevated, borderRadius: 14,
-      paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center',
+      flex: 1, backgroundColor: c.surfaceElevated, borderRadius: 12,
+      paddingVertical: 8, paddingHorizontal: 6, alignItems: 'center',
       borderWidth: StyleSheet.hairlineWidth, borderColor: c.separator,
     },
-    bankStatValue: { fontSize: 18, fontWeight: '800', color: c.textPrimary },
+    bankStatValue: { fontSize: 16, fontWeight: '800', color: c.textPrimary },
     bankStatLabel: { fontSize: 10, color: c.textSecondary, marginTop: 1 },
     bankShareBtn: {
-      height: 50, marginTop: 12, borderRadius: 999,
+      height: 46, marginTop: 10, borderRadius: 999,
       backgroundColor: '#E8571A',
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
       shadowColor: '#E8571A', shadowOffset: { width: 0, height: 6 },
@@ -1180,7 +1178,7 @@ function createStyles(c: ThemeColors) {
     },
     bankShareBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
     bankQrBtn: {
-      height: 44, marginTop: 10, borderRadius: 999,
+      height: 40, marginTop: 8, borderRadius: 999,
       backgroundColor: c.surfaceElevated,
       borderWidth: StyleSheet.hairlineWidth, borderColor: c.separator,
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
