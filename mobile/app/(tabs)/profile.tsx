@@ -359,24 +359,31 @@ export default function ProfileScreen() {
         {session && (creditBalance > 0 || referral?.code || canClaimReferral) && (
           <View style={styles.creditSection}>
             {creditBalance > 0 ? (
+              <View style={styles.bankCardShadow}>
               <LinearGradient
                 colors={['#26262A', '#1C1C1E', '#141416']}
                 start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }}
                 style={styles.bankCard}
               >
-                {/* soft sunset glow (true radial falloff) + corner watermark */}
+                {/* warm sunset bloom across the right half, like the reference */}
                 <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
                   <Defs>
-                    <RadialGradient id="sunGlow" cx="88%" cy="0%" r="65%">
-                      <Stop offset="0%" stopColor="#E8571A" stopOpacity="0.45" />
-                      <Stop offset="55%" stopColor="#E8571A" stopOpacity="0.10" />
+                    <RadialGradient id="sunGlow" cx="76%" cy="14%" r="80%">
+                      <Stop offset="0%" stopColor="#FF7A3C" stopOpacity="0.50" />
+                      <Stop offset="35%" stopColor="#E8571A" stopOpacity="0.22" />
+                      <Stop offset="70%" stopColor="#E8571A" stopOpacity="0.06" />
                       <Stop offset="100%" stopColor="#E8571A" stopOpacity="0" />
                     </RadialGradient>
+                    <RadialGradient id="sunCore" cx="80%" cy="8%" r="26%">
+                      <Stop offset="0%" stopColor="#FF9A5C" stopOpacity="0.35" />
+                      <Stop offset="100%" stopColor="#FF9A5C" stopOpacity="0" />
+                    </RadialGradient>
                   </Defs>
-                  <Circle cx="88%" cy="0%" r="65%" fill="url(#sunGlow)" />
+                  <Circle cx="76%" cy="14%" r="80%" fill="url(#sunGlow)" />
+                  <Circle cx="80%" cy="8%" r="26%" fill="url(#sunCore)" />
                 </Svg>
                 <View style={styles.bankWatermark}>
-                  <EstuaireMark size={130} fg="#fff" accent="#fff" />
+                  <EstuaireMark size={210} fg="#fff" accent="#fff" />
                 </View>
                 <View style={styles.bankTopRow}>
                   <View style={styles.bankBrandRow}>
@@ -412,6 +419,7 @@ export default function ProfileScreen() {
                   </View>
                 </View>
               </LinearGradient>
+              </View>
             ) : (
               /* Zero state — card waiting to be activated */
               <View style={styles.bankCardEmpty}>
@@ -1110,29 +1118,37 @@ function createStyles(c: ThemeColors) {
       lineHeight: 18,
     },
     // ── O'Kili Credit bank card (design "La carte") ────────────
-    creditSection: { marginBottom: 4 },
+    creditSection: { marginHorizontal: 24, marginBottom: 24 },
+    bankCardShadow: {
+      // Shadow lives on an un-clipped wrapper so the card actually floats
+      // like a physical object (overflow:hidden on the card kills shadows).
+      borderRadius: 22,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: 0.32,
+      shadowRadius: 20,
+      elevation: 10,
+      backgroundColor: '#1C1C1E',
+    },
     bankCard: {
-      borderRadius: 20,
+      borderRadius: 22,
       overflow: 'hidden',
-      height: 190,
-      padding: 16,
-      shadowColor: '#1C1C1E',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.25,
-      shadowRadius: 18,
-      elevation: 8,
+      height: 200,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.08)',
     },
     bankCardEmpty: {
-      borderRadius: 20,
+      borderRadius: 22,
       overflow: 'hidden',
-      height: 190,
-      padding: 16,
+      height: 200,
+      padding: 18,
       backgroundColor: c.surfaceElevated,
       borderWidth: 1.5,
       borderStyle: 'dashed',
       borderColor: c.separator,
     },
-    bankWatermark: { position: 'absolute', right: -38, bottom: -48, opacity: 0.07 },
+    bankWatermark: { position: 'absolute', right: -44, bottom: -62, opacity: 0.10 },
     bankTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     bankBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     bankBrand: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
