@@ -1,0 +1,78 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.0",
+    "copyright": "2026 Roch Apetoh",
+    "release": {
+      "automaticRelease": true
+    },
+    "categories": [
+      "FOOD_AND_DRINK",
+      "TRAVEL"
+    ],
+    "info": {
+      "fr-FR": {
+        "title": "O'Kili",
+        "subtitle": "Restos & bons plans au Gabon",
+        "description": "O'Kili, c'est le guide qui vous fait découvrir les meilleurs restaurants, bars et cafés de Libreville — et vous fait économiser à chaque sortie.\n\nDÉCOUVREZ\n• Un fil vidéo immersif pour découvrir les lieux comme si vous y étiez\n• Une carte interactive de Libreville avec tous les établissements\n• Les horaires fiables, menus, photos et avis pour chaque adresse\n• Recherche par quartier, catégorie et envie du moment\n\nÉCONOMISEZ\n• Des bons de réduction exclusifs chez nos restaurants partenaires\n• Les promos O'Kili valables dans tout le réseau\n• Un crédit de bienvenue offert à l'inscription, à dépenser chez nos partenaires\n• Parrainez vos amis et gagnez du crédit supplémentaire\n\nSIMPLE COMME UN QR\nMontrez votre QR code à la caisse, le restaurant le scanne, la réduction s'applique immédiatement. Pas de coupon papier, pas de compte compliqué.\n\nPOUR LES RESTAURATEURS\nGérez votre fiche, répondez aux avis, publiez des offres et suivez vos statistiques directement depuis l'application.\n\nO'Kili est conçu au Gabon, pour le Gabon. Bon appétit !",
+        "keywords": [
+          "restaurant",
+          "libreville",
+          "gabon",
+          "bons plans",
+          "réductions",
+          "coupons",
+          "sortir",
+          "manger",
+          "bars",
+          "cafés"
+        ],
+        "promoText": "Découvrez les meilleures adresses de Libreville et économisez avec des réductions exclusives. Votre crédit de bienvenue vous attend !",
+        "supportUrl": "https://okili-admin.vercel.app/support",
+        "privacyPolicyUrl": "https://okili-admin.vercel.app/privacy",
+        "screenshots": {
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/01-hero-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/02-feed-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/03-whatsapp-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/05-carte-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/07-credit-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/06-infos-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/04-explorer-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/09-favoris-1284x2778.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/10-themes-1284x2778.png"
+          ]
+        }
+      }
+    },
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "INFREQUENT_OR_MILD",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": true
+    }
+  }
+}
