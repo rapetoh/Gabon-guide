@@ -278,6 +278,9 @@ export interface MyCouponEntry {
   /** Platform coupons only: names of the places the coupon is scoped to
    *  (via coupon_places). Empty = valid at every restaurant. */
   scopePlaceNames: string[]
+  /** Storage path of the place's primary photo (place-photos bucket).
+   *  null for platform coupons and places without photos. */
+  photoPath: string | null
 }
 
 export function useMyCoupons() {
@@ -307,7 +310,10 @@ export function useMyCoupons() {
             is_active,
             starts_at,
             place_id,
-            place:places!coupons_place_id_fkey ( id, name )
+            place:places!coupons_place_id_fkey (
+              id, name,
+              photos ( storage_path, is_primary, is_deleted )
+            )
           )
         `)
         .eq('user_id', session.user.id)
@@ -332,7 +338,11 @@ export function useMyCoupons() {
           is_active: boolean
           starts_at: string
           place_id: string | null
-          place: { id: string; name: string } | null
+          place: {
+            id: string
+            name: string
+            photos: { storage_path: string; is_primary: boolean; is_deleted: boolean }[] | null
+          } | null
         } | null
       }
       const rows = (data ?? []) as unknown as Row[]
@@ -364,6 +374,8 @@ export function useMyCoupons() {
         .filter(r => r.coupon)
         .map(r => {
           const isPlatform = r.coupon!.place_id === null
+          const gallery = (r.coupon!.place?.photos ?? []).filter(p => !p.is_deleted)
+          const photo = gallery.find(p => p.is_primary) ?? gallery[0]
           return {
             redemptionId: r.id,
             redemptionCode: r.redemption_code,
@@ -379,6 +391,7 @@ export function useMyCoupons() {
             expiresAt: r.coupon!.expires_at,
             isPlatform,
             scopePlaceNames: isPlatform ? (scopeNames.get(r.coupon!.id) ?? []) : [],
+            photoPath: isPlatform ? null : (photo?.storage_path ?? null),
           }
         })
         .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))

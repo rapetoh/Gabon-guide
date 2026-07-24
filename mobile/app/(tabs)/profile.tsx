@@ -33,6 +33,7 @@ import { useMyReferral } from '../../hooks/useReferrals'
 import { useCreditBalance } from '../../hooks/useCredit'
 import { encodeCreditQrPayload, useMyCoupons, type MyCouponEntry } from '../../hooks/useCouponRedemption'
 import { CouponQrModal } from '../../components/place/CouponsBlock'
+import WalletCouponCard from '../../components/WalletCouponCard'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { disableProximity, enableProximity, isProximityEnabled } from '../../lib/proximity'
 import { supabase } from '../../lib/supabase'
@@ -40,23 +41,6 @@ import { ThemeColors, AppTheme } from '../../constants/themes'
 
 function formatFcfa(n: number, lang: 'fr' | 'en'): string {
   return `${n.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} FCFA`
-}
-
-function discountLabel(c: MyCouponEntry, lang: 'fr' | 'en'): string | null {
-  if (c.discountType === null || c.discountValue === null) return null
-  if (c.discountType === 'percentage') return `-${c.discountValue}%`
-  return `-${formatFcfa(c.discountValue, lang)}`
-}
-
-function formatExpiry(iso: string, lang: 'fr' | 'en'): string {
-  return new Date(iso).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
-    day: 'numeric', month: 'short',
-  })
-}
-
-// "X, Y, Z…" — at most 3 scope place names on a wallet card.
-function scopeNamesLabel(names: string[]): string {
-  return names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '')
 }
 
 // Estuaire brand mark (same paths as the app icon / design handoff)
@@ -564,46 +548,25 @@ export default function ProfileScreen() {
             discoverability gap for coupons earned without visiting the place. */}
         {session && myCoupons && myCoupons.length > 0 && (
           <View style={styles.myCouponsSection}>
-            <Text style={styles.myCouponsHeader}>
-              {lang === 'fr' ? 'Mes coupons' : 'My coupons'}
-            </Text>
-            <View style={{ gap: 10 }}>
-              {myCoupons.map(c => {
-                const placeLabel = c.isPlatform
-                  ? (lang === 'fr' ? "Promo O'Kili" : "O'Kili promo")
-                  : (c.placeName ?? '—')
-                return (
-                  <Pressable
-                    key={c.redemptionId}
-                    style={styles.myCouponCard}
-                    onPress={() => setWalletCoupon(c)}
-                  >
-                    <View style={styles.myCouponBorder} />
-                    <View style={styles.myCouponBody}>
-                      <View style={styles.myCouponTop}>
-                        <Text style={styles.myCouponPlace} numberOfLines={1}>{placeLabel}</Text>
-                        {discountLabel(c, lang) && (
-                          <View style={styles.myCouponDiscount}>
-                            <Text style={styles.myCouponDiscountText}>{discountLabel(c, lang)}</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.myCouponTitle} numberOfLines={2}>
-                        {lang === 'en' && c.titleEn ? c.titleEn : c.titleFr}
-                      </Text>
-                      <Text style={styles.myCouponMeta} numberOfLines={2}>
-                        {c.isPlatform
-                          ? (c.scopePlaceNames.length > 0
-                              ? `${lang === 'fr' ? 'Valable chez : ' : 'Valid at: '}${scopeNamesLabel(c.scopePlaceNames)}${lang === 'fr' ? ' · Expire le ' : ' · Until '}`
-                              : (lang === 'fr' ? 'Valable dans tous les restaurants · Expire le ' : 'Valid at any restaurant · Until '))
-                          : (lang === 'fr' ? 'Expire le ' : 'Until ')}
-                        {formatExpiry(c.expiresAt, lang)}
-                      </Text>
-                    </View>
-                    <Ionicons name="qr-code-outline" size={18} color={colors.iconMuted} style={styles.myCouponChevron} />
-                  </Pressable>
-                )
-              })}
+            <View>
+              <Text style={styles.myCouponsHeader}>
+                {lang === 'fr' ? 'Mes coupons' : 'My coupons'}
+              </Text>
+              <Text style={styles.myCouponsSub}>
+                {lang === 'fr'
+                  ? `${myCoupons.length} offre${myCoupons.length > 1 ? 's' : ''} active${myCoupons.length > 1 ? 's' : ''}`
+                  : `${myCoupons.length} active offer${myCoupons.length > 1 ? 's' : ''}`}
+              </Text>
+            </View>
+            <View style={{ gap: 12 }}>
+              {myCoupons.map(c => (
+                <WalletCouponCard
+                  key={c.redemptionId}
+                  coupon={c}
+                  lang={lang}
+                  onPress={() => setWalletCoupon(c)}
+                />
+              ))}
             </View>
           </View>
         )}
@@ -1275,28 +1238,12 @@ function createStyles(c: ThemeColors) {
       letterSpacing: 0.5,
       paddingHorizontal: 4,
     },
-    myCouponCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.surfaceBorder,
-      borderRadius: 14,
-      overflow: 'hidden',
+    myCouponsSub: {
+      fontSize: 12,
+      color: c.textSecondary,
+      paddingHorizontal: 4,
+      marginTop: 2,
     },
-    myCouponBorder: { width: 4, alignSelf: 'stretch', backgroundColor: '#E8571A' },
-    myCouponBody: { flex: 1, paddingVertical: 12, paddingHorizontal: 14, gap: 4 },
-    myCouponTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    myCouponPlace: { flex: 1, fontSize: 12, fontWeight: '700', color: c.textPrimary, textTransform: 'uppercase', letterSpacing: 0.4 },
-    myCouponDiscount: {
-      backgroundColor: 'rgba(232,87,26,0.12)',
-      paddingHorizontal: 8, paddingVertical: 2,
-      borderRadius: 999,
-    },
-    myCouponDiscountText: { color: '#E8571A', fontSize: 11, fontWeight: '700' },
-    myCouponTitle: { fontSize: 14, fontWeight: '600', color: c.textPrimary, lineHeight: 18 },
-    myCouponMeta: { fontSize: 11, color: c.textSecondary, marginTop: 2 },
-    myCouponChevron: { marginRight: 10 },
 
     // ── Android referral-code prompt ───────────────────────────
     codeInput: {
