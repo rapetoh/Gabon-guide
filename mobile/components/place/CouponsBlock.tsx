@@ -90,8 +90,8 @@ function CouponCard({ coupon, lang, onUse, placeName, placePhotoPath }: CouponCa
     : limitReached
       ? (lang === 'fr' ? 'Limite atteinte' : 'Limit reached')
       : userRedeemed > 0
-        ? (lang === 'fr' ? 'Utiliser à nouveau' : 'Use again')
-        : (lang === 'fr' ? 'Utiliser ce coupon' : 'Use this coupon')
+        ? (lang === 'fr' ? 'Réutiliser' : 'Use again')
+        : (lang === 'fr' ? 'Utiliser' : 'Use')
 
   // Sold out and limit-reached share the grey pill — the icon (X vs
   // checkmark) keeps the two semantically distinct without using green,

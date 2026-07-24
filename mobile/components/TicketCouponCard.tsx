@@ -230,8 +230,12 @@ function createStyles(c: ThemeColors) {
     expiry: {
       fontSize: 11,
       color: c.textSecondary,
+      // The pill must never be pushed off the card by a long date/label.
+      flexShrink: 1,
+      marginRight: 8,
     },
     pill: {
+      flexShrink: 0,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,
