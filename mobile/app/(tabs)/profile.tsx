@@ -13,6 +13,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  useWindowDimensions,
   Share,
   StyleSheet,
   Switch,
@@ -101,6 +102,12 @@ export default function ProfileScreen() {
   const [creditQrOpen, setCreditQrOpen] = useState(false)
   const [creditApplied, setCreditApplied] = useState<{ amount: number } | null>(null)
   const [walletCoupon, setWalletCoupon] = useState<MyCouponEntry | null>(null)
+  const [couponPage, setCouponPage] = useState(0)
+  const { width: windowWidth } = useWindowDimensions()
+  // Wallet carousel: one card per page with the next card peeking so the
+  // swipe affordance is self-evident. 24 = section margin, 32 = peek.
+  const couponCardWidth = windowWidth - 24 * 2 - 32
+  const couponSnap = couponCardWidth + 12
   const [referralPromptOpen, setReferralPromptOpen] = useState(false)
   const [proximityOn, setProximityOn] = useState(false)
   const { refreshing, onRefresh } = usePullRefresh()
@@ -558,16 +565,49 @@ export default function ProfileScreen() {
                   : `${myCoupons.length} active offer${myCoupons.length > 1 ? 's' : ''}`}
               </Text>
             </View>
-            <View style={{ gap: 12 }}>
-              {myCoupons.map(c => (
-                <WalletCouponCard
-                  key={c.redemptionId}
-                  coupon={c}
-                  lang={lang}
-                  onPress={() => setWalletCoupon(c)}
-                />
-              ))}
-            </View>
+            {myCoupons.length === 1 ? (
+              <WalletCouponCard
+                coupon={myCoupons[0]}
+                lang={lang}
+                onPress={() => setWalletCoupon(myCoupons[0])}
+              />
+            ) : (
+              <View>
+                {/* Swipeable wallet: bleed past the section margin so the
+                    next card peeks in from the screen edge. */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToInterval={couponSnap}
+                  snapToAlignment="start"
+                  decelerationRate="fast"
+                  style={{ marginHorizontal: -24 }}
+                  contentContainerStyle={{ paddingHorizontal: 24, gap: 12 }}
+                  onMomentumScrollEnd={e => {
+                    const page = Math.round(e.nativeEvent.contentOffset.x / couponSnap)
+                    setCouponPage(Math.max(0, Math.min(page, myCoupons.length - 1)))
+                  }}
+                >
+                  {myCoupons.map(c => (
+                    <View key={c.redemptionId} style={{ width: couponCardWidth }}>
+                      <WalletCouponCard
+                        coupon={c}
+                        lang={lang}
+                        onPress={() => setWalletCoupon(c)}
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
+                <View style={styles.couponDots}>
+                  {myCoupons.map((c, i) => (
+                    <View
+                      key={c.redemptionId}
+                      style={[styles.couponDot, i === couponPage && styles.couponDotActive]}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -1243,6 +1283,24 @@ function createStyles(c: ThemeColors) {
       color: c.textSecondary,
       paddingHorizontal: 4,
       marginTop: 2,
+    },
+    couponDots: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 10,
+    },
+    couponDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: c.iconMuted,
+      opacity: 0.4,
+    },
+    couponDotActive: {
+      backgroundColor: '#E8571A',
+      opacity: 1,
+      width: 16,
     },
 
     // ── Android referral-code prompt ───────────────────────────
