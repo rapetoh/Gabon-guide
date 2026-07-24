@@ -557,7 +557,13 @@ export default function PlaceDetailScreen() {
               future use. */}
 
           {/* ── Coupons (active only) ── */}
-          <CouponsBlock placeId={p.id} />
+          {/* Ticket cards reuse the page's own name + primary photo — the
+              user is already looking at this restaurant, no extra query. */}
+          <CouponsBlock
+            placeId={p.id}
+            placeName={p.name}
+            placePhotoPath={primaryPhoto?.storage_path ?? null}
+          />
 
           {/* ── About ── */}
           {description && (

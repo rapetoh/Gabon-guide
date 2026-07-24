@@ -31,13 +31,7 @@ import {
   useStartRedemption,
   type CouponRedemption,
 } from '../../hooks/useCouponRedemption'
-
-function formatExpiry(iso: string, lang: 'fr' | 'en') {
-  return new Date(iso).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
-    day: 'numeric',
-    month: 'short',
-  })
-}
+import TicketCouponCard, { formatDiscount } from '../TicketCouponCard'
 
 function formatDateTime(iso: string, lang: 'fr' | 'en') {
   return new Date(iso).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US', {
@@ -49,23 +43,22 @@ function formatDateTime(iso: string, lang: 'fr' | 'en') {
   })
 }
 
-function discountLabel(c: Pick<Coupon, 'discount_type' | 'discount_value'>, lang: 'fr' | 'en'): string | null {
-  if (c.discount_type === null || c.discount_value === null) return null
-  if (c.discount_type === 'percentage') return `-${c.discount_value}%`
-  return `-${c.discount_value.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')} FCFA`
-}
-
 interface CouponCardProps {
   coupon: Coupon
   lang: 'fr' | 'en'
   onUse: (coupon: Coupon) => void
+  /** Restaurant name for the bold top line (platform coupons get "Promo O'Kili") */
+  placeName?: string | null
+  /** Primary place photo (storage path) for the ticket's photo panel */
+  placePhotoPath?: string | null
 }
 
-function CouponCard({ coupon, lang, onUse }: CouponCardProps) {
-  const colors = useThemeColors()
+// Maps a place-page Coupon (+ live usage state) onto the shared ticket card
+// so a coupon looks identical at discovery and in the wallet.
+function CouponCard({ coupon, lang, onUse, placeName, placePhotoPath }: CouponCardProps) {
   const title = lang === 'en' && coupon.title_en ? coupon.title_en : coupon.title_fr
   const desc = lang === 'en' && coupon.description_en ? coupon.description_en : coupon.description_fr
-  const dLabel = discountLabel(coupon, lang)
+  const dLabel = formatDiscount(coupon.discount_type, coupon.discount_value, lang)
   const isPlatform = coupon.place_id === null
 
   const { data: usage } = useCouponUsage(coupon.id)
@@ -77,89 +70,55 @@ function CouponCard({ coupon, lang, onUse }: CouponCardProps) {
   const maxPerUser = coupon.max_redemptions_per_user
   const buttonDisabled = soldOut || limitReached
 
+  // Usage counters, preserved from the pre-ticket card.
+  const metaLines: string[] = []
+  if (userRedeemed > 0 || maxPerUser > 1) {
+    if (maxPerUser > 1) {
+      metaLines.push(lang === 'fr'
+        ? `Utilisé ${userRedeemed} / ${maxPerUser}`
+        : `Used ${userRedeemed} / ${maxPerUser}`)
+    }
+    if (lastRedemption?.redeemed_at) {
+      metaLines.push(
+        (lang === 'fr' ? 'Dernière fois : ' : 'Last used: ') + formatDateTime(lastRedemption.redeemed_at, lang),
+      )
+    }
+  }
+
+  const pillLabel = soldOut
+    ? (lang === 'fr' ? 'Épuisé' : 'Sold out')
+    : limitReached
+      ? (lang === 'fr' ? 'Limite atteinte' : 'Limit reached')
+      : userRedeemed > 0
+        ? (lang === 'fr' ? 'Utiliser à nouveau' : 'Use again')
+        : (lang === 'fr' ? 'Utiliser ce coupon' : 'Use this coupon')
+
+  // Sold out and limit-reached share the grey pill — the icon (X vs
+  // checkmark) keeps the two semantically distinct without using green,
+  // which reads as "go".
+  const pillIcon = soldOut ? 'close-circle' as const
+    : limitReached ? 'checkmark-circle' as const
+    : 'qr-code-outline' as const
+
   return (
-    <View style={[styles.couponCard, { backgroundColor: colors.surfaceElevated }]}>
-      <View style={[styles.couponLeftBorder, isPlatform && { backgroundColor: '#8B5CF6' }]} />
-      <View style={styles.couponBody}>
-        <View style={styles.couponHeader}>
-          <Ionicons name={isPlatform ? 'globe-outline' : 'ticket'} size={16} color={isPlatform ? '#8B5CF6' : '#E8571A'} />
-          <Text style={[styles.couponEyebrow, isPlatform && { color: '#8B5CF6' }]}>
-            {isPlatform
-              ? (lang === 'fr' ? "Promo O'Kili" : "O'Kili promo")
-              : (lang === 'fr' ? 'Coupon' : 'Coupon')}
-          </Text>
-          {dLabel && (
-            <View style={[styles.discountPill, isPlatform && { backgroundColor: 'rgba(139,92,246,0.12)' }]}>
-              <Text style={[styles.discountPillText, isPlatform && { color: '#8B5CF6' }]}>{dLabel}</Text>
-            </View>
-          )}
-          <View style={{ flex: 1 }} />
-          <Text style={[styles.couponExpiry, { color: colors.textSecondary }]}>
-            {lang === 'fr' ? 'Expire le ' : 'Until '}{formatExpiry(coupon.expires_at, lang)}
-          </Text>
-        </View>
-        <Text style={[styles.couponTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-          {title}
-        </Text>
-        {desc && (
-          <Text style={[styles.couponDesc, { color: colors.textSecondary }]} numberOfLines={3}>
-            {desc}
-          </Text>
-        )}
-
-        {(userRedeemed > 0 || maxPerUser > 1) && (
-          <View style={styles.usageMeta}>
-            {maxPerUser > 1 && (
-              <Text style={[styles.usageMetaText, { color: colors.textSecondary }]}>
-                {lang === 'fr'
-                  ? `Utilisé ${userRedeemed} / ${maxPerUser}`
-                  : `Used ${userRedeemed} / ${maxPerUser}`}
-              </Text>
-            )}
-            {lastRedemption?.redeemed_at && (
-              <Text style={[styles.usageMetaText, { color: colors.textSecondary }]}>
-                {lang === 'fr' ? 'Dernière fois : ' : 'Last used: '}{formatDateTime(lastRedemption.redeemed_at, lang)}
-              </Text>
-            )}
-          </View>
-        )}
-
-        <Pressable
-          onPress={() => !buttonDisabled && onUse(coupon)}
-          disabled={buttonDisabled}
-          style={[
-            styles.useBtn,
-            soldOut && styles.useBtnSoldOut,
-            limitReached && !soldOut && styles.useBtnLimit,
-          ]}
-        >
-          {soldOut ? (
-            <>
-              <Ionicons name="close-circle" size={14} color="#fff" />
-              <Text style={styles.useBtnText}>
-                {lang === 'fr' ? 'Épuisé' : 'Sold out'}
-              </Text>
-            </>
-          ) : limitReached ? (
-            <>
-              <Ionicons name="checkmark-circle" size={14} color="#fff" />
-              <Text style={styles.useBtnText}>
-                {lang === 'fr' ? 'Limite atteinte' : 'Limit reached'}
-              </Text>
-            </>
-          ) : (
-            <>
-              <Ionicons name="qr-code-outline" size={14} color="#fff" />
-              <Text style={styles.useBtnText}>
-                {userRedeemed > 0
-                  ? (lang === 'fr' ? 'Utiliser à nouveau' : 'Use again')
-                  : (lang === 'fr' ? 'Utiliser ce coupon' : 'Use this coupon')}
-              </Text>
-            </>
-          )}
-        </Pressable>
-      </View>
-    </View>
+    <TicketCouponCard
+      /* Platform coupons get the branded gradient panel, place coupons the
+         restaurant photo (gradient fallback when the place has none). */
+      photoPath={isPlatform ? null : (placePhotoPath ?? null)}
+      discount={dLabel}
+      placeLabel={isPlatform
+        ? (lang === 'fr' ? "Promo O'Kili" : "O'Kili promo")
+        : (placeName ?? (lang === 'fr' ? 'Coupon' : 'Coupon'))}
+      title={title}
+      description={desc}
+      metaLines={metaLines.length > 0 ? metaLines : undefined}
+      expiresAt={coupon.expires_at}
+      lang={lang}
+      pillLabel={pillLabel}
+      pillIcon={pillIcon}
+      disabled={buttonDisabled}
+      onPress={() => onUse(coupon)}
+    />
   )
 }
 
@@ -186,7 +145,7 @@ export function CouponQrModal({ visible, coupon, onClose }: QrModalProps) {
   const startRedemption = useStartRedemption()
   const qc = useQueryClient()
   const { session } = useSession()
-  const dLabel = coupon ? discountLabel(coupon, lang) : null
+  const dLabel = coupon ? formatDiscount(coupon.discount_type, coupon.discount_value, lang) : null
 
   const [redemption, setRedemption] = useState<CouponRedemption | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
@@ -375,9 +334,11 @@ interface AllCouponsSheetProps {
   lang: 'fr' | 'en'
   onClose: () => void
   onUse: (coupon: Coupon) => void
+  placeName?: string | null
+  placePhotoPath?: string | null
 }
 
-function AllCouponsSheet({ visible, coupons, lang, onClose, onUse }: AllCouponsSheetProps) {
+function AllCouponsSheet({ visible, coupons, lang, onClose, onUse, placeName, placePhotoPath }: AllCouponsSheetProps) {
   const colors = useThemeColors()
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -399,6 +360,8 @@ function AllCouponsSheet({ visible, coupons, lang, onClose, onUse }: AllCouponsS
               key={c.id}
               coupon={c}
               lang={lang}
+              placeName={placeName}
+              placePhotoPath={placePhotoPath}
               onUse={(coupon) => {
                 onClose()
                 onUse(coupon)
@@ -411,7 +374,13 @@ function AllCouponsSheet({ visible, coupons, lang, onClose, onUse }: AllCouponsS
   )
 }
 
-export default function CouponsBlock({ placeId }: { placeId: string }) {
+export default function CouponsBlock({ placeId, placeName, placePhotoPath }: {
+  placeId: string
+  /** Restaurant name — shown bold on each ticket card's top line */
+  placeName?: string | null
+  /** Primary place photo storage path — the ticket's left panel */
+  placePhotoPath?: string | null
+}) {
   const { i18n } = useTranslation()
   const lang = i18n.language === 'en' ? 'en' : 'fr'
   const { session } = useSession()
@@ -447,7 +416,14 @@ export default function CouponsBlock({ placeId }: { placeId: string }) {
         </View>
         <View style={{ gap: 10 }}>
           {inlineCoupons.map(c => (
-            <CouponCard key={c.id} coupon={c} lang={lang} onUse={handleUse} />
+            <CouponCard
+              key={c.id}
+              coupon={c}
+              lang={lang}
+              placeName={placeName}
+              placePhotoPath={placePhotoPath}
+              onUse={handleUse}
+            />
           ))}
           {hiddenCount > 0 && (
             <Pressable onPress={() => setSeeAllOpen(true)} style={styles.seeAllBtn}>
@@ -467,6 +443,8 @@ export default function CouponsBlock({ placeId }: { placeId: string }) {
         visible={seeAllOpen}
         coupons={coupons}
         lang={lang}
+        placeName={placeName}
+        placePhotoPath={placePhotoPath}
         onClose={() => setSeeAllOpen(false)}
         onUse={handleUse}
       />
@@ -526,25 +504,7 @@ const styles = StyleSheet.create({
   },
   sheetScroll: { paddingHorizontal: 18, paddingBottom: 32, gap: 10 },
 
-  couponCard: {
-    flexDirection: 'row',
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  couponLeftBorder: { width: 4, backgroundColor: '#E8571A' },
-  couponBody: { flex: 1, padding: 14, gap: 6 },
-  couponHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  couponEyebrow: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#E8571A',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  couponExpiry: { fontSize: 11 },
-  couponTitle: { fontSize: 15, fontWeight: '700', lineHeight: 20 },
-  couponDesc: { fontSize: 13, lineHeight: 18 },
-
+  // Used by the QR modal header (the cards themselves are TicketCouponCard).
   discountPill: {
     backgroundColor: 'rgba(232,87,26,0.12)',
     paddingHorizontal: 8,
@@ -552,27 +512,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   discountPillText: { color: '#E8571A', fontSize: 11, fontWeight: '700' },
-
-  usageMeta: { gap: 2, marginTop: 2 },
-  usageMetaText: { fontSize: 11, lineHeight: 15 },
-
-  useBtn: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#E8571A',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginTop: 6,
-  },
-  useBtnSoldOut: { backgroundColor: '#8E8E93' },
-  // Same grey as Sold out — limit-reached is a "done" state, not an
-  // "available" one. The checkmark icon (vs Sold out's X) keeps the two
-  // semantically distinct without using green, which reads as "go".
-  useBtnLimit:   { backgroundColor: '#8E8E93' },
-  useBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   modalBackdrop: {
     flex: 1,
