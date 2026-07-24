@@ -208,6 +208,10 @@ export default function NotificationsScreen() {
                   onPress={() => {
                     if (n.type === 'new_review') {
                       router.push('/restaurant-admin/reviews' as any) // owner-facing: jump to the reply screen
+                    } else if (n.type === 'tier_expiry' && n.payload.place_id) {
+                      // Admin-only notification: jump straight to the place's edit
+                      // screen where the +30/+90 jours renewal buttons live.
+                      router.push(`/admin/place/${n.payload.place_id}` as any)
                     } else if (n.payload.place_id) {
                       router.push(`/place/${n.payload.place_id}` as any)
                     }

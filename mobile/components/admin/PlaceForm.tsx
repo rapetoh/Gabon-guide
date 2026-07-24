@@ -51,6 +51,16 @@ type Hours = Record<string, DayHours>
 
 const DEFAULT_DAY: DayHours = { open: '09:00', close: '22:00', overnight: false, closed: false }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// One-click renewal: extends from max(today, current expiry) so remaining paid
+// days are never lost — same rule as the web dashboard's +30/+90 jours buttons.
+function extendExpiry(current: string, days: number): string {
+  const parsed = current ? new Date(current + 'T00:00:00Z').getTime() : NaN
+  const base = Math.max(Date.now(), Number.isNaN(parsed) ? 0 : parsed)
+  return new Date(base + days * DAY_MS).toISOString().slice(0, 10)
+}
+
 interface Props {
   mode: 'create' | 'edit'
   placeId?: string
@@ -757,21 +767,19 @@ export function PlaceForm({ mode, placeId }: Props) {
             <View style={styles.tierQuickRow}>
               <Pressable
                 style={styles.tierQuickBtn}
-                onPress={() => {
-                  const d = new Date()
-                  d.setMonth(d.getMonth() + 3)
-                  setSubscriptionExpiresAt(d.toISOString().slice(0, 10))
-                }}
+                onPress={() => setSubscriptionExpiresAt(extendExpiry(subscriptionExpiresAt, 30))}
               >
-                <Text style={styles.tierQuickText}>+3 {lang === 'fr' ? 'mois' : 'months'}</Text>
+                <Text style={styles.tierQuickText}>+30 {lang === 'fr' ? 'jours' : 'days'}</Text>
               </Pressable>
               <Pressable
                 style={styles.tierQuickBtn}
-                onPress={() => {
-                  const d = new Date()
-                  d.setFullYear(d.getFullYear() + 1)
-                  setSubscriptionExpiresAt(d.toISOString().slice(0, 10))
-                }}
+                onPress={() => setSubscriptionExpiresAt(extendExpiry(subscriptionExpiresAt, 90))}
+              >
+                <Text style={styles.tierQuickText}>+90 {lang === 'fr' ? 'jours' : 'days'}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.tierQuickBtn}
+                onPress={() => setSubscriptionExpiresAt(extendExpiry(subscriptionExpiresAt, 365))}
               >
                 <Text style={styles.tierQuickText}>+1 {lang === 'fr' ? 'an' : 'year'}</Text>
               </Pressable>
