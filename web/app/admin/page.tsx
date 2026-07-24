@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { createClient } from '../../lib/supabase-server'
 import Topbar from '../../components/admin/Topbar'
+import SubscriptionsPanel, { type SubscriptionRow } from './SubscriptionsPanel'
 
 export default async function AdminOverviewPage() {
   const supabase = await createClient()
 
-  const [{ data: places }, { data: recentFull }, { data: subscribers }] = await Promise.all([
+  const [{ data: places }, { data: recentFull }, { data: subscribers }, { data: expiring }] = await Promise.all([
     supabase
       .from('places')
       .select('id, is_active, is_promoted, subscription_tier, subscription_expires_at, created_at')
@@ -21,6 +22,15 @@ export default async function AdminOverviewPage() {
       .from('places')
       .select('id, subscription_tier')
       .eq('is_deleted', false),
+    // Paid subscriptions expired or expiring within 7 days, most overdue first
+    supabase
+      .from('places')
+      .select('id, name, subscription_tier, subscription_expires_at')
+      .eq('is_deleted', false)
+      .neq('subscription_tier', 'free')
+      .not('subscription_expires_at', 'is', null)
+      .lt('subscription_expires_at', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('subscription_expires_at', { ascending: true }),
   ])
 
   const all = places ?? []
@@ -69,6 +79,9 @@ export default async function AdminOverviewPage() {
           <StatCard label="Premium" value={premium} hint={`${standard} Standard · ${free} Free`} tone="orange" />
           <StatCard label="Expiring ≤ 30d" value={expiringSoon} hint="Subscriptions ending soon" tone={expiringSoon > 0 ? 'orange' : 'muted'} />
         </div>
+
+        {/* Abonnements: expired / expiring soon, with renewal actions */}
+        <SubscriptionsPanel places={(expiring ?? []) as SubscriptionRow[]} />
 
         {/* 2-col: tier distribution + recent activity */}
         <div className="grid grid-cols-[1.4fr_1fr] gap-4">
